@@ -1,5 +1,6 @@
 package com.nowlsantos.nowlsolitaire.domain.engine
 
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameState
@@ -68,13 +69,23 @@ data class KlondikeSession(
         fun newGame(
             drawMode: DrawMode = DrawMode.DRAW_ONE,
             deckPasses: DeckPasses = DeckPasses.UNLIMITED,
-            seed: Long = kotlin.random.Random.nextLong()
+            dealMode: DealMode = DealMode.WINNABLE,
+            seed: Long? = null
         ): KlondikeSession = KlondikeSession(
-            currentState = DeckDealer.dealNewGame(drawMode = drawMode, deckPasses = deckPasses, seed = seed)
+            currentState = DeckDealer.dealNewGame(
+                drawMode = drawMode,
+                deckPasses = deckPasses,
+                dealMode = dealMode,
+                seed = seed
+            )
         )
 
         fun replayDeal(state: GameState): KlondikeSession = KlondikeSession(
-            currentState = DeckDealer.dealNewGame(drawMode = state.drawMode, deckPasses = state.deckPasses, seed = state.seed)
+            currentState = DeckDealer.dealNewGame(
+                drawMode = state.drawMode,
+                deckPasses = state.deckPasses,
+                seed = state.seed
+            )
         )
     }
 }
