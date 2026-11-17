@@ -1,49 +1,63 @@
 package com.nowlsantos.nowlsolitaire
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
-import org.jetbrains.compose.resources.painterResource
+import com.nowlsantos.nowlsolitaire.di.appModules
+import com.nowlsantos.nowlsolitaire.ui.screens.KlondikeRoute
+import com.nowlsantos.nowlsolitaire.ui.screens.LobbyScreen
+import com.nowlsantos.nowlsolitaire.ui.screens.PyramidRoute
+import com.nowlsantos.nowlsolitaire.ui.theme.NowlSolitaireTheme
+import org.koin.core.context.startKoin
+import org.koin.mp.KoinPlatformTools
 
-import nowlsolitaire.shared.generated.resources.Res
-import nowlsolitaire.shared.generated.resources.compose_multiplatform
+private enum class AppDestination {
+    LOBBY,
+    KLONDIKE,
+    PYRAMID
+}
+
+private fun ensureKoinStarted() {
+    if (KoinPlatformTools.defaultContext().getOrNull() == null) {
+        startKoin {
+            modules(appModules)
+        }
+    }
+}
 
 @Composable
-@Preview
 fun App() {
-    MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
-            }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
-                }
-            }
+    remember { ensureKoinStarted() }
+
+    NowlSolitaireTheme {
+        var currentDestination by rememberSaveable { mutableStateOf(AppDestination.LOBBY) }
+
+        when (currentDestination) {
+            AppDestination.LOBBY -> LobbyScreen(
+                onSelectKlondike = { currentDestination = AppDestination.KLONDIKE },
+                onSelectPyramid = { currentDestination = AppDestination.PYRAMID }
+            )
+            AppDestination.KLONDIKE -> KlondikeRoute(
+                onNavigateBack = { currentDestination = AppDestination.LOBBY }
+            )
+            AppDestination.PYRAMID -> PyramidRoute(
+                onNavigateBack = { currentDestination = AppDestination.LOBBY }
+            )
         }
+    }
+}
+
+@Preview
+@Composable
+private fun AppPreview() {
+    NowlSolitaireTheme {
+        LobbyScreen(
+            onSelectKlondike = {},
+            onSelectPyramid = {}
+        )
     }
 }

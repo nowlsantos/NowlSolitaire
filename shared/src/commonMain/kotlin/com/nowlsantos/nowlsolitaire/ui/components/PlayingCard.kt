@@ -1,0 +1,445 @@
+package com.nowlsantos.nowlsolitaire.ui.components
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.TargetBasedAnimation
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.nowlsantos.nowlsolitaire.domain.model.Card
+import com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme
+import com.nowlsantos.nowlsolitaire.domain.model.Rank
+import com.nowlsantos.nowlsolitaire.domain.model.Suit
+import com.nowlsantos.nowlsolitaire.domain.model.TableTheme
+import com.nowlsantos.nowlsolitaire.ui.theme.TableColors
+import com.nowlsantos.nowlsolitaire.ui.theme.toColors
+import org.jetbrains.compose.resources.imageResource
+import kotlin.math.roundToInt
+
+val LocalCardBackTheme = compositionLocalOf { CardBackTheme.CLASSIC }
+
+private class InPlaceFlipHolder(var lastFaceUp: Boolean) {
+    var currentAngle: Float = if (lastFaceUp) 180f else 0f
+}
+
+private val CardShape = RoundedCornerShape(6.dp)
+
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun PlayingCardView(
+    card: Card,
+    cardWidth: Dp,
+    cardHeight: Dp,
+    colors: TableColors,
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    isHinted: Boolean = false,
+    isElevated: Boolean = false,
+    elevation: Dp = 6.dp,
+    flipOnAppear: Boolean = false,
+    flipDelayMillis: Int = 0,
+    externalFlipProgress: State<Float>? = null,
+    cardBackTheme: CardBackTheme = LocalCardBackTheme.current,
+    textMeasurer: TextMeasurer? = null,
+    onClick: (() -> Unit)? = null
+) {
+    val externalFlip = if (flipOnAppear) externalFlipProgress else null
+
+    val flipHolder = remember(card.id) { InPlaceFlipHolder(card.isFaceUp) }
+    var isFlippingInPlace by remember(card.id) { mutableStateOf(false) }
+
+    val showFront: Boolean
+    val isMidFlip: Boolean
+    val flipModifier: Modifier
+
+    if (externalFlip != null) {
+        showFront = remember(externalFlip) {
+            derivedStateOf { FastOutSlowInEasing.transform(externalFlip.value) > 0.5f }
+        }.value
+        isMidFlip = false
+        flipModifier = Modifier.graphicsLayer {
+            val angle = FastOutSlowInEasing.transform(externalFlip.value) * 180f
+            if (angle in 0.5f..179.5f) {
+                rotationY = angle
+                cameraDistance = 12f * density
+            }
+        }
+    } else if (flipOnAppear) {
+        val appearAnim = remember(card.id) { Animatable(0f) }
+        LaunchedEffect(card.id) {
+            appearAnim.animateTo(
+                targetValue = 180f,
+                animationSpec = tween(durationMillis = 220, delayMillis = flipDelayMillis)
+            )
+        }
+        showFront = remember(card.id) {
+            derivedStateOf { appearAnim.value > 90f }
+        }.value
+        isMidFlip = remember(card.id) {
+            derivedStateOf { appearAnim.value in 0.5f..179.5f }
+        }.value
+        flipModifier = Modifier.graphicsLayer {
+            val angle = appearAnim.value
+            if (angle in 0.5f..179.5f) {
+                rotationY = angle
+                cameraDistance = 12f * density
+            }
+        }
+    } else if (isElevated) {
+        showFront = card.isFaceUp
+        isMidFlip = false
+        flipModifier = Modifier
+    } else {
+        if (card.isFaceUp != flipHolder.lastFaceUp) {
+            flipHolder.lastFaceUp = card.isFaceUp
+            isFlippingInPlace = true
+        }
+        if (isFlippingInPlace) {
+            val angleState = remember(card.id) { mutableFloatStateOf(flipHolder.currentAngle) }
+            LaunchedEffect(card.isFaceUp) {
+                val targetAngle = if (card.isFaceUp) 180f else 0f
+                val anim = TargetBasedAnimation(
+                    animationSpec = tween(durationMillis = 240),
+                    typeConverter = Float.VectorConverter,
+                    initialValue = flipHolder.currentAngle,
+                    targetValue = targetAngle
+                )
+                var startNanos = -1L
+                while (true) {
+                    val finished = withFrameNanos { frameNanos ->
+                        if (startNanos < 0L) {
+                            startNanos = frameNanos - 16_666_667L
+                        }
+                        val playNanos = frameNanos - startNanos
+                        val value = anim.getValueFromNanos(playNanos)
+                        flipHolder.currentAngle = value
+                        angleState.floatValue = value
+                        anim.isFinishedFromNanos(playNanos)
+                    }
+                    if (finished) break
+                }
+                flipHolder.currentAngle = targetAngle
+                angleState.floatValue = targetAngle
+                isFlippingInPlace = false
+            }
+            showFront = remember(card.id) {
+                derivedStateOf { angleState.floatValue > 90f }
+            }.value
+            isMidFlip = true
+            flipModifier = Modifier.graphicsLayer {
+                rotationY = angleState.floatValue
+                cameraDistance = 12f * density
+            }
+        } else {
+            flipHolder.currentAngle = if (card.isFaceUp) 180f else 0f
+            showFront = card.isFaceUp
+            isMidFlip = false
+            flipModifier = Modifier
+        }
+    }
+
+    val cardDescription = if (card.isFaceUp) {
+        "${card.rank.name.lowercase()} of ${card.suit.name.lowercase()}"
+    } else {
+        "Face-down card"
+    }
+
+    val clickableModifier = if (onClick != null) {
+        Modifier.clickable(
+            role = Role.Button,
+            onClick = onClick
+        )
+    } else {
+        Modifier
+    }
+
+    val elevationModifier = when {
+        isElevated && elevation > 0.dp -> Modifier.shadow(elevation = elevation, shape = CardShape, clip = false)
+        isSelected -> Modifier.shadow(elevation = 3.dp, shape = CardShape, clip = false)
+        else -> Modifier
+    }
+
+    if (!showFront && !isMidFlip && !isSelected && !isHinted) {
+        val backBitmap = imageResource(getCardBackDrawableRes(cardBackTheme))
+        Canvas(
+            modifier = modifier
+                .width(cardWidth)
+                .height(cardHeight)
+                .then(elevationModifier)
+                .semantics { contentDescription = cardDescription }
+                .then(clickableModifier)
+        ) {
+            val w = size.width.roundToInt()
+            val h = size.height.roundToInt()
+            if (w > 0 && h > 0) {
+                drawImage(
+                    image = backBitmap,
+                    dstSize = IntSize(w, h)
+                )
+            }
+        }
+    } else if (showFront && !isMidFlip && externalFlip == null) {
+        val frontBitmap = imageResource(getCardDrawableRes(card))
+        val highlightColor = when {
+            isSelected -> colors.selectionGlow
+            isHinted -> colors.hintGlow
+            else -> null
+        }
+        Canvas(
+            modifier = modifier
+                .width(cardWidth)
+                .height(cardHeight)
+                .then(elevationModifier)
+                .semantics { contentDescription = cardDescription }
+                .then(clickableModifier)
+        ) {
+            val w = size.width.roundToInt()
+            val h = size.height.roundToInt()
+            if (w > 0 && h > 0) {
+                drawImage(
+                    image = frontBitmap,
+                    dstSize = IntSize(w, h)
+                )
+            }
+            if (highlightColor != null) {
+                val highlightStrokeWidth = 2.2.dp.toPx()
+                val halfStroke = highlightStrokeWidth * 0.5f
+                val corner = 6.dp.toPx()
+                drawRoundRect(
+                    color = highlightColor,
+                    topLeft = Offset(halfStroke, halfStroke),
+                    size = Size(
+                        (size.width - highlightStrokeWidth).coerceAtLeast(1f),
+                        (size.height - highlightStrokeWidth).coerceAtLeast(1f)
+                    ),
+                    cornerRadius = CornerRadius(corner, corner),
+                    style = Stroke(width = highlightStrokeWidth)
+                )
+            }
+        }
+    } else {
+        val borderStroke = when {
+            isSelected -> BorderStroke(2.2.dp, colors.selectionGlow)
+            isHinted -> BorderStroke(2.2.dp, colors.hintGlow)
+            else -> null
+        }
+        val borderModifier = if (borderStroke != null) Modifier.border(borderStroke, CardShape) else Modifier
+        Box(
+            modifier = modifier
+                .width(cardWidth)
+                .height(cardHeight)
+                .then(flipModifier)
+                .then(elevationModifier)
+                .then(borderModifier)
+                .semantics { contentDescription = cardDescription }
+                .then(clickableModifier)
+        ) {
+            if (showFront) {
+                val frontModifier = if (externalFlip != null) {
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val angle = FastOutSlowInEasing.transform(externalFlip.value) * 180f
+                            rotationY = if (angle in 0.5f..179.5f) 180f else 0f
+                        }
+                } else {
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { rotationY = 180f }
+                }
+                Box(modifier = frontModifier) {
+                    CardFrontContent(card = card)
+                }
+            } else {
+                CardBackContent(cardBackTheme = cardBackTheme)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardFrontContent(card: Card) {
+    val bitmap = imageResource(getCardDrawableRes(card))
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width.roundToInt()
+        val h = size.height.roundToInt()
+        if (w > 0 && h > 0) {
+            drawImage(
+                image = bitmap,
+                dstSize = IntSize(w, h)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CardBackContent(cardBackTheme: CardBackTheme = LocalCardBackTheme.current) {
+    val bitmap = imageResource(getCardBackDrawableRes(cardBackTheme))
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width.roundToInt()
+        val h = size.height.roundToInt()
+        if (w > 0 && h > 0) {
+            drawImage(
+                image = bitmap,
+                dstSize = IntSize(w, h)
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyPileSlot(
+    cardWidth: Dp,
+    cardHeight: Dp,
+    colors: TableColors,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    showRefreshIcon: Boolean = false,
+    isHighlighted: Boolean = false,
+    isDropTarget: Boolean = false,
+    contentDescriptionText: String? = "Empty pile",
+    onClick: (() -> Unit)? = null
+) {
+    val shape = RoundedCornerShape(6.dp)
+    val strokeColor = when {
+        isDropTarget -> colors.selectionGlow
+        isHighlighted -> colors.hintGlow
+        else -> colors.slotStroke
+    }
+    val strokeWidth = if (isHighlighted || isDropTarget) 2.2.dp else 1.2.dp
+
+    val semanticsModifier = if (contentDescriptionText != null) {
+        Modifier.semantics { contentDescription = contentDescriptionText }
+    } else {
+        Modifier
+    }
+
+    val clickableModifier = if (onClick != null) {
+        Modifier.clickable(
+            role = Role.Button,
+            onClick = onClick
+        )
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = modifier
+            .width(cardWidth)
+            .height(cardHeight)
+            .background(colors.slotFill, shape)
+            .border(strokeWidth, strokeColor, shape)
+            .then(semanticsModifier)
+            .then(clickableModifier),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            showRefreshIcon -> Icon(
+                imageVector = Icons.Rounded.Refresh,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.65f),
+                modifier = Modifier.size((cardWidth * 0.45f).coerceIn(18.dp, 28.dp))
+            )
+            label != null -> {
+                val labelFontSize = (cardWidth.value * 0.34f).coerceIn(13f, 22f).sp
+                val labelStyle = remember(labelFontSize) {
+                    TextStyle(
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontSize = labelFontSize,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                BasicText(
+                    text = label,
+                    style = labelStyle
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF145A32)
+@Composable
+private fun PlayingCardPreview() {
+    val colors = TableTheme.CLASSIC_GREEN.toColors()
+    Row(
+        modifier = Modifier.padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        PlayingCardView(
+            card = Card(Suit.HEARTS, Rank.QUEEN, isFaceUp = true),
+            cardWidth = 56.dp,
+            cardHeight = 80.dp,
+            colors = colors
+        )
+        PlayingCardView(
+            card = Card(Suit.SPADES, Rank.ACE, isFaceUp = true),
+            cardWidth = 56.dp,
+            cardHeight = 80.dp,
+            colors = colors,
+            isSelected = true
+        )
+        PlayingCardView(
+            card = Card(Suit.CLUBS, Rank.SEVEN, isFaceUp = false),
+            cardWidth = 56.dp,
+            cardHeight = 80.dp,
+            colors = colors
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        EmptyPileSlot(
+            cardWidth = 56.dp,
+            cardHeight = 80.dp,
+            colors = colors,
+            label = "A"
+        )
+    }
+}

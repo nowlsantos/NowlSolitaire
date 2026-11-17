@@ -1,0 +1,370 @@
+package com.nowlsantos.nowlsolitaire.ui.state
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.nowlsantos.nowlsolitaire.data.PyramidRepository
+import com.nowlsantos.nowlsolitaire.domain.engine.PyramidEngine
+import com.nowlsantos.nowlsolitaire.domain.engine.PyramidInteractionResult
+import com.nowlsantos.nowlsolitaire.domain.engine.PyramidRules
+import com.nowlsantos.nowlsolitaire.domain.engine.PyramidSession
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
+import com.nowlsantos.nowlsolitaire.domain.model.SavedPyramidGameSnapshot
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
+
+class PyramidViewModel(
+    private val repository: PyramidRepository,
+    private val engine: PyramidEngine,
+    private val rules: PyramidRules
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(PyramidUiState())
+    val uiState: StateFlow<PyramidUiState> = _uiState.asStateFlow()
+
+    private var session: PyramidSession = PyramidSession.newGame()
+    private var hasStartedMoving = false
+    private var recordedAsPlayed = false
+    private var recordedAsWon = false
+    private var isTimerPaused = false
+    private var nextDealId = 1L
+
+    private val persistChannel = Channel<SavedPyramidGameSnapshot?>(Channel.CONFLATED)
+
+    init {
+        viewModelScope.launch {
+            for (snapshot in persistChannel) {
+                repository.saveGame(snapshot)
+            }
+        }
+        observePreferencesAndStats()
+        initializeGame()
+        startTimerLoop()
+    }
+
+    fun onIntent(intent: PyramidIntent) {
+        when (intent) {
+            PyramidIntent.NewGame -> startNewGame()
+            PyramidIntent.ReplayDeal -> replayCurrentDeal()
+            PyramidIntent.DrawOrRecycle -> drawOrRecycle()
+            PyramidIntent.Undo -> undoMove()
+            PyramidIntent.RequestHint -> requestHint()
+            PyramidIntent.ClearHint -> clearHint()
+            PyramidIntent.DismissNoMovesDialog -> _uiState.update { it.copy(showNoMovesDialog = false) }
+            PyramidIntent.ClearHintMessage -> _uiState.update { it.copy(hintMessage = null) }
+            PyramidIntent.ClearActiveMatch -> _uiState.update { it.copy(activeMatch = null) }
+            PyramidIntent.ClearActiveDrawCard -> _uiState.update { it.copy(activeDrawCard = null) }
+            is PyramidIntent.TapCard -> handleTapCard(intent.location)
+            is PyramidIntent.SetTimerPaused -> {
+                isTimerPaused = intent.paused
+                if (intent.paused && hasStartedMoving && !_uiState.value.isWon) {
+                    persistCurrentGame()
+                }
+            }
+            is PyramidIntent.UpdateTableTheme -> updateSettings { it.copy(tableTheme = intent.theme) }
+            is PyramidIntent.UpdateCardBackTheme -> updateSettings { it.copy(cardBackTheme = intent.cardBackTheme) }
+            is PyramidIntent.UpdateMaxRecycles -> updateSettings { it.copy(maxRecycles = intent.maxRecycles) }
+            is PyramidIntent.UpdateShowTimer -> updateSettings { it.copy(showTimer = intent.enabled) }
+            PyramidIntent.ResetStats -> viewModelScope.launch { repository.resetStats() }
+        }
+    }
+
+    private fun observePreferencesAndStats() {
+        viewModelScope.launch {
+            repository.settingsFlow.collect { settings ->
+                _uiState.update { it.copy(settings = settings) }
+            }
+        }
+        viewModelScope.launch {
+            repository.statsFlow.collect { stats ->
+                _uiState.update { it.copy(stats = stats) }
+            }
+        }
+    }
+
+    private fun initializeGame() {
+        viewModelScope.launch {
+            val saved = repository.loadSavedGame()
+            val settings = repository.settingsFlow.first()
+
+            if (saved != null && !saved.gameState.isWon) {
+                val normalizedState = if (saved.gameState.stock.any { !it.isFaceUp }) {
+                    saved.gameState.copy(stock = saved.gameState.stock.map { it.copy(isFaceUp = true) })
+                } else {
+                    saved.gameState
+                }
+                val normalizedUndo = saved.undoStack.map { undoState ->
+                    if (undoState.stock.any { !it.isFaceUp }) {
+                        undoState.copy(stock = undoState.stock.map { it.copy(isFaceUp = true) })
+                    } else {
+                        undoState
+                    }
+                }
+                session = PyramidSession(
+                    currentState = normalizedState,
+                    undoStack = normalizedUndo
+                )
+                hasStartedMoving = saved.hasStartedMoving
+                recordedAsPlayed = saved.recordedAsPlayed
+                recordedAsWon = saved.gameState.isWon
+                val isDeadlocked = hasStartedMoving && !rules.hasAnyMovesLeft(session.currentState)
+                val isOngoing = saved.hasStartedMoving || saved.gameState.moveCount > 0
+                val dealId = if (isOngoing) 0L else nextDealId++
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        gameState = session.currentState,
+                        canUndo = session.canUndo,
+                        elapsedSeconds = saved.elapsedSeconds,
+                        settings = settings,
+                        showNoMovesDialog = isDeadlocked,
+                        dealId = dealId
+                    )
+                }
+            } else {
+                startFreshDeal(settings)
+            }
+        }
+    }
+
+    private fun startFreshDeal(settings: PyramidSettings) {
+        val dealId = nextDealId++
+        session = PyramidSession.newGame(maxRecycles = settings.maxRecycles)
+        hasStartedMoving = false
+        recordedAsPlayed = false
+        recordedAsWon = false
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                gameState = session.currentState,
+                canUndo = false,
+                elapsedSeconds = 0,
+                activeHint = null,
+                showNoMovesDialog = false,
+                hintMessage = null,
+                settings = settings,
+                lastMatchedResult = null,
+                activeMatch = null,
+                activeDrawCard = null,
+                dealId = dealId
+            )
+        }
+        persistCurrentGame()
+    }
+
+    private fun startNewGame() {
+        startFreshDeal(_uiState.value.settings)
+    }
+
+    private fun replayCurrentDeal() {
+        val dealId = nextDealId++
+        session = PyramidSession.replayDeal(session.currentState)
+        hasStartedMoving = false
+        recordedAsPlayed = false
+        recordedAsWon = false
+        _uiState.update {
+            it.copy(
+                gameState = session.currentState,
+                canUndo = false,
+                elapsedSeconds = 0,
+                activeHint = null,
+                showNoMovesDialog = false,
+                hintMessage = null,
+                lastMatchedResult = null,
+                activeMatch = null,
+                activeDrawCard = null,
+                dealId = dealId
+            )
+        }
+        persistCurrentGame()
+    }
+
+    private fun drawOrRecycle() {
+        ensureGameStarted()
+        clearHint()
+
+        val oldState = session.currentState
+        if (oldState.stock.isNotEmpty()) {
+            val drawnCard = oldState.stock.last().copy(isFaceUp = true)
+            session = session.drawOrRecycle()
+            val isDeadlocked = !rules.hasAnyMovesLeft(session.currentState)
+            _uiState.update {
+                it.copy(
+                    gameState = session.currentState,
+                    canUndo = session.canUndo,
+                    showNoMovesDialog = isDeadlocked,
+                    activeDrawCard = drawnCard
+                )
+            }
+            persistCurrentGame()
+        } else {
+            session = session.drawOrRecycle()
+            if (session.currentState != oldState) {
+                val isDeadlocked = !rules.hasAnyMovesLeft(session.currentState)
+                _uiState.update {
+                    it.copy(
+                        gameState = session.currentState,
+                        canUndo = session.canUndo,
+                        showNoMovesDialog = isDeadlocked,
+                        activeDrawCard = null
+                    )
+                }
+                persistCurrentGame()
+            }
+        }
+    }
+
+    private fun handleTapCard(location: PyramidLocation) {
+        clearHint()
+
+        val (newSession, result) = session.interactCard(location)
+        session = newSession
+
+        when (result) {
+            is PyramidInteractionResult.Matched -> {
+                ensureGameStarted()
+                val isWon = result.isVictory
+                if (isWon && !recordedAsWon) {
+                    recordedAsWon = true
+                    viewModelScope.launch {
+                        repository.recordGameWon(
+                            score = session.currentState.score,
+                            elapsedSeconds = _uiState.value.elapsedSeconds
+                        )
+                    }
+                }
+
+                val isDeadlocked = !isWon && !rules.hasAnyMovesLeft(session.currentState)
+                _uiState.update {
+                    it.copy(
+                        gameState = session.currentState,
+                        canUndo = session.canUndo,
+                        showNoMovesDialog = isDeadlocked,
+                        lastMatchedResult = "+${result.pointsEarned} pts",
+                        activeMatch = result.match
+                    )
+                }
+                persistCurrentGame()
+            }
+            is PyramidInteractionResult.Selected,
+            is PyramidInteractionResult.Deselected,
+            is PyramidInteractionResult.InvalidPair -> {
+                _uiState.update {
+                    it.copy(
+                        gameState = session.currentState,
+                        canUndo = session.canUndo
+                    )
+                }
+            }
+            null -> Unit
+        }
+    }
+
+    private fun undoMove() {
+        if (!session.canUndo) return
+        clearHint()
+
+        session = session.undo()
+        val isDeadlocked = !rules.hasAnyMovesLeft(session.currentState)
+
+        _uiState.update {
+            it.copy(
+                gameState = session.currentState,
+                canUndo = session.canUndo,
+                showNoMovesDialog = isDeadlocked,
+                activeMatch = null,
+                activeDrawCard = null
+            )
+        }
+        persistCurrentGame()
+    }
+
+    private fun requestHint() {
+        val hint = session.findHint()
+        if (hint != null) {
+            _uiState.update {
+                it.copy(
+                    activeHint = hint,
+                    hintMessage = "Match found!"
+                )
+            }
+        } else {
+            val message = if (session.currentState.stock.isNotEmpty()) {
+                "No open matches. Draw from the stock."
+            } else if (session.currentState.canRecycleStock) {
+                "No open matches. Recycle the waste pile."
+            } else {
+                "No remaining moves."
+            }
+            _uiState.update {
+                it.copy(
+                    activeHint = null,
+                    hintMessage = message
+                )
+            }
+        }
+    }
+
+    private fun clearHint() {
+        if (_uiState.value.activeHint != null || _uiState.value.hintMessage != null) {
+            _uiState.update {
+                it.copy(
+                    activeHint = null,
+                    hintMessage = null
+                )
+            }
+        }
+    }
+
+    private fun ensureGameStarted() {
+        if (!hasStartedMoving) {
+            hasStartedMoving = true
+        }
+        if (!recordedAsPlayed) {
+            recordedAsPlayed = true
+            viewModelScope.launch {
+                repository.recordGamePlayed()
+            }
+        }
+    }
+
+    private fun updateSettings(transform: (PyramidSettings) -> PyramidSettings) {
+        viewModelScope.launch {
+            repository.updateSettings(transform)
+        }
+    }
+
+    private fun persistCurrentGame() {
+        if (session.currentState.isWon) {
+            persistChannel.trySend(null)
+            return
+        }
+        val snapshot = SavedPyramidGameSnapshot(
+            gameState = session.currentState,
+            undoStack = session.undoStack,
+            elapsedSeconds = _uiState.value.elapsedSeconds,
+            hasStartedMoving = hasStartedMoving,
+            recordedAsPlayed = recordedAsPlayed
+        )
+        persistChannel.trySend(snapshot)
+    }
+
+    private fun startTimerLoop() {
+        viewModelScope.launch {
+            while (isActive) {
+                delay(1.seconds)
+                if (!isTimerPaused && hasStartedMoving && !_uiState.value.isWon && !_uiState.value.isLoading) {
+                    _uiState.update { it.copy(elapsedSeconds = it.elapsedSeconds + 1) }
+                }
+            }
+        }
+    }
+}
