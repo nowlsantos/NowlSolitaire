@@ -156,7 +156,8 @@ object PyramidRules {
     fun hasAnyMovesLeft(state: PyramidGameState): Boolean {
         if (state.isWon) return false
         if (findAvailableMoves(state).isNotEmpty()) return true
-        if (state.stock.isEmpty() && !state.canRecycleStock) return false
+        if (state.stock.isNotEmpty()) return true
+        if (!state.canRecycleStock) return false
 
         var sim = state
         val seenCycles = HashSet<Pair<List<Card>, List<Card>>>()

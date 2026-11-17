@@ -83,9 +83,27 @@ class PyramidEngineTest {
             pyramid = listOf(
                 PyramidCard(0, 0, Card(Suit.SPADES, Rank.TWO, isFaceUp = true), isRemoved = false)
             ),
-            stock = listOf(
+            stock = emptyList(),
+            waste = listOf(
                 Card(Suit.HEARTS, Rank.THREE, isFaceUp = true),
-                Card(Suit.CLUBS, Rank.FOUR, isFaceUp = true)
+                Card(Suit.CLUBS, Rank.FOUR, isFaceUp = true),
+                Card(Suit.DIAMONDS, Rank.FIVE, isFaceUp = true)
+            ),
+            maxRecycles = -1,
+            recyclesUsed = 0
+        )
+
+        assertFalse(PyramidRules.hasAnyMovesLeft(state))
+    }
+
+    @Test
+    fun nonEmptyStock_isNotDeadlocked() {
+        val state = PyramidGameState(
+            pyramid = listOf(
+                PyramidCard(0, 0, Card(Suit.SPADES, Rank.TWO, isFaceUp = true), isRemoved = false)
+            ),
+            stock = listOf(
+                Card(Suit.HEARTS, Rank.THREE, isFaceUp = true)
             ),
             waste = listOf(
                 Card(Suit.DIAMONDS, Rank.FIVE, isFaceUp = true)
@@ -94,7 +112,7 @@ class PyramidEngineTest {
             recyclesUsed = 0
         )
 
-        assertFalse(PyramidRules.hasAnyMovesLeft(state))
+        assertTrue(PyramidRules.hasAnyMovesLeft(state))
     }
 
     @Test
@@ -114,7 +132,7 @@ class PyramidEngineTest {
 
         assertTrue(PyramidRules.hasAnyMovesLeft(state))
 
-        val exhausted = state.copy(recyclesUsed = 1)
+        val exhausted = state.copy(stock = emptyList(), recyclesUsed = 1)
         assertFalse(PyramidRules.hasAnyMovesLeft(exhausted))
     }
 

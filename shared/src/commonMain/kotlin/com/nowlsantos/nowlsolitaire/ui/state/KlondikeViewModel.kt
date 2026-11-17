@@ -266,7 +266,11 @@ class KlondikeViewModel(
             }
             if (hint != null) {
                 val message = if (hint.from == PileLocation.Stock) {
-                    "Draw from the stock pile to reach a playable card"
+                    if (snapshot.stock.isNotEmpty()) {
+                        "Draw from the stock pile to reach a playable card"
+                    } else {
+                        "Recycle the waste pile to reach a playable card"
+                    }
                 } else null
                 _uiState.update {
                     it.copy(

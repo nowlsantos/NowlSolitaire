@@ -208,10 +208,23 @@ object KlondikeEngine {
         }
 
         // 5. Multi-step Tableau reorganizations and Foundation -> Tableau pull-downs that unlock progress
-        return findProgressiveSequenceFirstMove(state, drawCount)
+        val sequenceMove = findProgressiveSequenceFirstMove(state, drawCount)
+        if (sequenceMove != null) {
+            return sequenceMove
+        }
+
+        // 6. If stock has un-opened cards, suggest drawing from Stock
+        if (state.stock.isNotEmpty()) {
+            return HintMove(PileLocation.Stock, 0, PileLocation.Waste)
+        }
+
+        return null
     }
 
     fun hasAvailableMoves(state: GameState, drawCount: Int = state.drawMode.drawCount): Boolean {
+        if (state.isWon) return false
+        if (state.stock.isNotEmpty()) return true
+        if (state.canRecycleStock && canStockProduceMove(state, drawCount)) return true
         return findHint(state, drawCount) != null
     }
 

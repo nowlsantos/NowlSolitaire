@@ -5,6 +5,7 @@ import com.nowlsantos.nowlsolitaire.domain.model.Card
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameState
+import com.nowlsantos.nowlsolitaire.domain.model.HintMove
 import com.nowlsantos.nowlsolitaire.domain.model.PileLocation
 import com.nowlsantos.nowlsolitaire.domain.model.Rank
 import com.nowlsantos.nowlsolitaire.domain.model.Suit
@@ -46,12 +47,13 @@ class KlondikeEngineTest {
     }
 
     @Test
-    fun draw1_nonEmptyUnplayableStock_withPlayableCardBuriedInWaste_andNoRecyclesLeft_isDeadlocked() {
+    fun draw1_emptyStock_withPlayableCardBuriedInWaste_andNoRecyclesLeft_isDeadlocked() {
         val state = GameState(
-            stock = listOf(card(Suit.CLUBS, Rank.NINE, faceUp = false)),
+            stock = emptyList(),
             waste = listOf(
                 card(Suit.SPADES, Rank.ACE, faceUp = true),
-                card(Suit.DIAMONDS, Rank.SEVEN, faceUp = true)
+                card(Suit.DIAMONDS, Rank.SEVEN, faceUp = true),
+                card(Suit.CLUBS, Rank.NINE, faceUp = true)
             ),
             foundations = emptyFoundations(),
             tableau = emptyTableau(),
@@ -251,8 +253,11 @@ class KlondikeEngineTest {
         )
 
         val state = GameState(
-            stock = listOf(card(Suit.HEARTS, Rank.FIVE, faceUp = false)),
-            waste = listOf(card(Suit.CLUBS, Rank.NINE)),
+            stock = emptyList(),
+            waste = listOf(
+                card(Suit.HEARTS, Rank.FIVE, faceUp = false),
+                card(Suit.CLUBS, Rank.NINE)
+            ),
             foundations = foundations,
             tableau = tableau,
             drawMode = DrawMode.DRAW_ONE,
@@ -261,5 +266,26 @@ class KlondikeEngineTest {
 
         assertNull(KlondikeEngine.findHint(state))
         assertFalse(KlondikeEngine.hasAvailableMoves(state))
+    }
+
+    @Test
+    fun nonEmptyStock_hasMovesAndSuggestsStockDraw() {
+        val tableau = emptyTableau().toMutableList()
+        tableau[0] = listOf(
+            card(Suit.CLUBS, Rank.THREE, faceUp = false),
+            card(Suit.HEARTS, Rank.EIGHT),
+            card(Suit.SPADES, Rank.SEVEN)
+        )
+        val state = GameState(
+            stock = listOf(card(Suit.HEARTS, Rank.FIVE, faceUp = false)),
+            waste = listOf(card(Suit.CLUBS, Rank.NINE)),
+            foundations = emptyFoundations(),
+            tableau = tableau,
+            drawMode = DrawMode.DRAW_ONE,
+            deckPasses = DeckPasses.UNLIMITED
+        )
+
+        assertTrue(KlondikeEngine.hasAvailableMoves(state))
+        assertEquals(HintMove(PileLocation.Stock, 0, PileLocation.Waste), KlondikeEngine.findHint(state))
     }
 }
