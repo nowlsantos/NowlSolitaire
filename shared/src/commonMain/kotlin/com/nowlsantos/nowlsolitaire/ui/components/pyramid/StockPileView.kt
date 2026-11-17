@@ -150,13 +150,9 @@ internal fun StockPileView(
         }
 
         Text(
-            text = if (gameState.maxRecycles < 0) {
-                "Stock (∞)"
-            } else {
-                "Stock (${gameState.remainingRecycles} left)"
-            },
+            text = "Stock",
             color = colors.barContent.copy(alpha = 0.8f),
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
     }

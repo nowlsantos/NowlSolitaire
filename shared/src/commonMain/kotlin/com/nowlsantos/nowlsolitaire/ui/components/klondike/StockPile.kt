@@ -106,7 +106,7 @@ internal fun StockPile(
             }*/
         }
 
-        val deckPasses = boardState.gameState.deckPasses
+        /*val deckPasses = boardState.gameState.deckPasses
         if (deckPasses.maxPasses > 0) {
             val passesLeft = boardState.gameState.remainingPasses
             Surface(
@@ -124,6 +124,6 @@ internal fun StockPile(
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                 )
             }
-        }
+        }*/
     }
 }
