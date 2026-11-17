@@ -51,7 +51,7 @@ fun App() {
     }
 }
 
-@Preview
+/*@Preview
 @Composable
 private fun AppPreview() {
     NowlSolitaireTheme {
@@ -60,4 +60,4 @@ private fun AppPreview() {
             onSelectPyramid = {}
         )
     }
-}
+}*/
