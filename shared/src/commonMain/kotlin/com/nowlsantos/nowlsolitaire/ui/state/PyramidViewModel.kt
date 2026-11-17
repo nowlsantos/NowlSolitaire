@@ -71,7 +71,7 @@ class PyramidViewModel(
             }
             is PyramidIntent.UpdateTableTheme -> updateSettings { it.copy(tableTheme = intent.theme) }
             is PyramidIntent.UpdateCardBackTheme -> updateSettings { it.copy(cardBackTheme = intent.cardBackTheme) }
-            is PyramidIntent.UpdateMaxRecycles -> updateSettings { it.copy(maxRecycles = intent.maxRecycles) }
+            is PyramidIntent.UpdateMaxRecycles -> updateMaxRecycles(intent.maxRecycles)
             is PyramidIntent.UpdateShowTimer -> updateSettings { it.copy(showTimer = intent.enabled) }
             PyramidIntent.ResetStats -> viewModelScope.launch { repository.resetStats() }
         }
@@ -188,38 +188,36 @@ class PyramidViewModel(
     }
 
     private fun drawOrRecycle() {
-        ensureGameStarted()
+        if (_uiState.value.isWon) return
         clearHint()
 
         val oldState = session.currentState
-        if (oldState.stock.isNotEmpty()) {
-            val drawnCard = oldState.stock.last().copy(isFaceUp = true)
-            session = session.drawOrRecycle()
-            val isDeadlocked = !rules.hasAnyMovesLeft(session.currentState)
-            _uiState.update {
-                it.copy(
-                    gameState = session.currentState,
-                    canUndo = session.canUndo,
-                    showNoMovesDialog = isDeadlocked,
-                    activeDrawCard = drawnCard
-                )
+        val updated = session.drawOrRecycle()
+        if (updated === session) {
+            val isDeadlocked = !oldState.isWon && !rules.hasAnyMovesLeft(oldState)
+            if (isDeadlocked) {
+                _uiState.update { it.copy(showNoMovesDialog = true) }
             }
-            persistCurrentGame()
-        } else {
-            session = session.drawOrRecycle()
-            if (session.currentState != oldState) {
-                val isDeadlocked = !rules.hasAnyMovesLeft(session.currentState)
-                _uiState.update {
-                    it.copy(
-                        gameState = session.currentState,
-                        canUndo = session.canUndo,
-                        showNoMovesDialog = isDeadlocked,
-                        activeDrawCard = null
-                    )
-                }
-                persistCurrentGame()
-            }
+            return
         }
+
+        ensureGameStarted()
+        session = updated
+        val drawnCard = if (oldState.stock.isNotEmpty()) {
+            oldState.stock.last().copy(isFaceUp = true)
+        } else {
+            null
+        }
+        val isDeadlocked = !session.currentState.isWon && !rules.hasAnyMovesLeft(session.currentState)
+        _uiState.update {
+            it.copy(
+                gameState = session.currentState,
+                canUndo = session.canUndo,
+                showNoMovesDialog = isDeadlocked,
+                activeDrawCard = drawnCard
+            )
+        }
+        persistCurrentGame()
     }
 
     private fun handleTapCard(location: PyramidLocation) {
@@ -273,7 +271,7 @@ class PyramidViewModel(
         clearHint()
 
         session = session.undo()
-        val isDeadlocked = !rules.hasAnyMovesLeft(session.currentState)
+        val isDeadlocked = !session.currentState.isWon && !rules.hasAnyMovesLeft(session.currentState)
 
         _uiState.update {
             it.copy(
@@ -288,28 +286,54 @@ class PyramidViewModel(
     }
 
     private fun requestHint() {
+        if (_uiState.value.isWon) return
+        val state = session.currentState
         val hint = session.findHint()
         if (hint != null) {
             _uiState.update {
                 it.copy(
                     activeHint = hint,
+                    showNoMovesDialog = false,
                     hintMessage = "Match found!"
                 )
             }
-        } else {
-            val message = if (session.currentState.stock.isNotEmpty()) {
+        } else if (rules.hasAnyMovesLeft(state)) {
+            val message = if (state.stock.isNotEmpty()) {
                 "No open matches. Draw from the stock."
-            } else if (session.currentState.canRecycleStock) {
-                "No open matches. Recycle the waste pile."
             } else {
-                "No remaining moves."
+                "No open matches. Recycle the waste pile."
             }
             _uiState.update {
                 it.copy(
                     activeHint = null,
+                    showNoMovesDialog = false,
                     hintMessage = message
                 )
             }
+        } else {
+            _uiState.update {
+                it.copy(
+                    activeHint = null,
+                    hintMessage = null,
+                    showNoMovesDialog = true
+                )
+            }
+        }
+    }
+
+    private fun updateMaxRecycles(maxRecycles: Int) {
+        viewModelScope.launch {
+            repository.updateSettings { it.copy(maxRecycles = maxRecycles) }
+            val updatedState = session.currentState.copy(maxRecycles = maxRecycles)
+            session = session.copy(currentState = updatedState)
+            val isDeadlocked = hasStartedMoving && !updatedState.isWon && !rules.hasAnyMovesLeft(updatedState)
+            _uiState.update {
+                it.copy(
+                    gameState = updatedState,
+                    showNoMovesDialog = isDeadlocked
+                )
+            }
+            persistCurrentGame()
         }
     }
 

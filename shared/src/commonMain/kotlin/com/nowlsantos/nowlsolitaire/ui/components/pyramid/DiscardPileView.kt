@@ -120,7 +120,7 @@ internal fun DiscardPileView(
         Text(
             text = "Discard",
             color = colors.barContent.copy(alpha = 0.8f),
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
     }

@@ -90,7 +90,7 @@ data class PyramidSettings(
     val tableTheme: TableTheme = TableTheme.CLASSIC_GREEN,
     val cardBackTheme: CardBackTheme = CardBackTheme.CLASSIC,
     val maxRecycles: Int = PyramidGameState.DEFAULT_MAX_RECYCLES,
-    val showTimer: Boolean = true,
+    val showTimer: Boolean = false,
     val tapToAutoMove: Boolean = true
 )
 

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -116,8 +117,10 @@ class KlondikeViewModel(
                 hasStartedMoving = saved.hasStartedMoving
                 recordedAsPlayed = saved.recordedAsPlayed
                 recordedAsWon = saved.gameState.isWon
-                val drawCount = settings.drawMode.drawCount
-                val isDeadlocked = hasStartedMoving && engine.findHint(session.currentState, drawCount) == null
+                val snapshot = session.currentState
+                val isDeadlocked = hasStartedMoving && withContext(defaultDispatcher) {
+                    !engine.hasAvailableMoves(snapshot)
+                }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -224,15 +227,7 @@ class KlondikeViewModel(
         if (_uiState.value.isAutoCompleting || _uiState.value.isWon) return
         val updated = session.drawOrRecycle()
         if (updated === session) {
-            deadlockJob?.cancel()
-            deadlockJob = viewModelScope.launch(defaultDispatcher) {
-                val drawCount = _uiState.value.settings.drawMode.drawCount
-                if (!_uiState.value.isWon && engine.findHint(session.currentState, drawCount) == null) {
-                    if (isActive) {
-                        _uiState.update { it.copy(showNoMovesDialog = true) }
-                    }
-                }
-            }
+            scheduleDeadlockCheck()
             return
         }
         applyNewSession(updated)
@@ -257,9 +252,18 @@ class KlondikeViewModel(
 
     private fun requestHint() {
         if (_uiState.value.isAutoCompleting || _uiState.value.isWon) return
-        viewModelScope.launch(defaultDispatcher) {
-            val drawCount = _uiState.value.settings.drawMode.drawCount
-            val hint = engine.findHint(session.currentState, drawCount)
+        val snapshot = session.currentState
+        viewModelScope.launch {
+            val hint = withContext(defaultDispatcher) {
+                engine.findHint(snapshot)
+            }
+            if (!isActive ||
+                session.currentState !== snapshot ||
+                _uiState.value.isAutoCompleting ||
+                snapshot.isWon
+            ) {
+                return@launch
+            }
             if (hint != null) {
                 val message = if (hint.from == PileLocation.Stock) {
                     "Draw from the stock pile to reach a playable card"
@@ -431,14 +435,24 @@ class KlondikeViewModel(
         persistCurrentGame()
 
         // Check deadlock in the background without blocking the UI thread!
+        scheduleDeadlockCheck()
+    }
+
+    private fun scheduleDeadlockCheck() {
         deadlockJob?.cancel()
-        if (!session.currentState.isWon && !_uiState.value.isAutoCompleting) {
-            deadlockJob = viewModelScope.launch(defaultDispatcher) {
-                val drawCount = _uiState.value.settings.drawMode.drawCount
-                val hint = engine.findHint(session.currentState, drawCount)
-                if (hint == null && isActive) {
-                    _uiState.update { it.copy(showNoMovesDialog = true) }
-                }
+        val snapshot = session.currentState
+        if (snapshot.isWon || _uiState.value.isAutoCompleting) return
+        deadlockJob = viewModelScope.launch {
+            val hasMoves = withContext(defaultDispatcher) {
+                engine.hasAvailableMoves(snapshot)
+            }
+            if (!hasMoves &&
+                isActive &&
+                session.currentState === snapshot &&
+                !_uiState.value.isAutoCompleting &&
+                !snapshot.isWon
+            ) {
+                _uiState.update { it.copy(showNoMovesDialog = true) }
             }
         }
     }
@@ -472,8 +486,9 @@ class KlondikeViewModel(
             } else {
                 val updatedState = session.currentState.copy(deckPasses = deckPasses)
                 session = session.copy(currentState = updatedState)
-                _uiState.update { it.copy(gameState = updatedState) }
+                _uiState.update { it.copy(gameState = updatedState, showNoMovesDialog = false) }
                 persistCurrentGame()
+                scheduleDeadlockCheck()
             }
         }
     }

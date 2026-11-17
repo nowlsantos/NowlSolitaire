@@ -27,7 +27,7 @@ data class GameSettings(
     val cardBackTheme: CardBackTheme = CardBackTheme.CLASSIC,
     val leftHanded: Boolean = false,
     val tapToAutoMove: Boolean = true,
-    val showTimer: Boolean = true,
+    val showTimer: Boolean = false,
 )
 
 @Serializable

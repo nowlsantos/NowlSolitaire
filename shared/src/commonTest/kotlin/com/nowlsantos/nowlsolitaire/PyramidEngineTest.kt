@@ -4,6 +4,7 @@ import com.nowlsantos.nowlsolitaire.domain.engine.PyramidEngine
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidInteractionResult
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidRules
 import com.nowlsantos.nowlsolitaire.domain.model.Card
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidCard
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidMatch
@@ -11,6 +12,7 @@ import com.nowlsantos.nowlsolitaire.domain.model.Rank
 import com.nowlsantos.nowlsolitaire.domain.model.Suit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -73,5 +75,85 @@ class PyramidEngineTest {
         assertIs<PyramidInteractionResult.Matched>(matched)
         assertTrue(matched.state.stock.isEmpty())
         assertEquals(listOf(king), matched.state.discardPile)
+    }
+
+    @Test
+    fun unlimitedRecyclesWithNoReachableMatches_isDeadlocked() {
+        val state = PyramidGameState(
+            pyramid = listOf(
+                PyramidCard(0, 0, Card(Suit.SPADES, Rank.TWO, isFaceUp = true), isRemoved = false)
+            ),
+            stock = listOf(
+                Card(Suit.HEARTS, Rank.THREE, isFaceUp = true),
+                Card(Suit.CLUBS, Rank.FOUR, isFaceUp = true)
+            ),
+            waste = listOf(
+                Card(Suit.DIAMONDS, Rank.FIVE, isFaceUp = true)
+            ),
+            maxRecycles = -1,
+            recyclesUsed = 0
+        )
+
+        assertFalse(PyramidRules.hasAnyMovesLeft(state))
+    }
+
+    @Test
+    fun buriedWasteMatchReachableAfterRecycle_hasMovesLeft() {
+        val state = PyramidGameState(
+            pyramid = listOf(
+                PyramidCard(0, 0, Card(Suit.SPADES, Rank.THREE, isFaceUp = true), isRemoved = false)
+            ),
+            stock = listOf(Card(Suit.CLUBS, Rank.FOUR, isFaceUp = true)),
+            waste = listOf(
+                Card(Suit.HEARTS, Rank.TEN, isFaceUp = true),
+                Card(Suit.DIAMONDS, Rank.FIVE, isFaceUp = true)
+            ),
+            maxRecycles = 1,
+            recyclesUsed = 0
+        )
+
+        assertTrue(PyramidRules.hasAnyMovesLeft(state))
+
+        val exhausted = state.copy(recyclesUsed = 1)
+        assertFalse(PyramidRules.hasAnyMovesLeft(exhausted))
+    }
+
+    @Test
+    fun adjacentCardsInWasteBecomeStockWastePairAfterRecycle() {
+        // After drawing 4C and recycling: stock = [4C, 9H, 4S], waste = []
+        // First draw puts 4S in waste and 9H on top of stock -> 4S + 9H = 13!
+        val state = PyramidGameState(
+            pyramid = listOf(
+                PyramidCard(0, 0, Card(Suit.SPADES, Rank.TWO, isFaceUp = true), isRemoved = false)
+            ),
+            stock = listOf(Card(Suit.CLUBS, Rank.FOUR, isFaceUp = true)),
+            waste = listOf(
+                Card(Suit.SPADES, Rank.FOUR, isFaceUp = true),
+                Card(Suit.HEARTS, Rank.NINE, isFaceUp = true)
+            ),
+            maxRecycles = 1,
+            recyclesUsed = 0
+        )
+
+        assertTrue(PyramidRules.hasAnyMovesLeft(state))
+    }
+
+    @Test
+    fun nonAdjacentStockWasteCardsWithNoPyramidMatch_isDeadlocked() {
+        val state = PyramidGameState(
+            pyramid = listOf(
+                PyramidCard(0, 0, Card(Suit.SPADES, Rank.THREE, isFaceUp = true), isRemoved = false)
+            ),
+            stock = emptyList(),
+            waste = listOf(
+                Card(Suit.SPADES, Rank.FOUR, isFaceUp = true),
+                Card(Suit.CLUBS, Rank.TWO, isFaceUp = true),
+                Card(Suit.HEARTS, Rank.NINE, isFaceUp = true)
+            ),
+            maxRecycles = -1,
+            recyclesUsed = 0
+        )
+
+        assertFalse(PyramidRules.hasAnyMovesLeft(state))
     }
 }

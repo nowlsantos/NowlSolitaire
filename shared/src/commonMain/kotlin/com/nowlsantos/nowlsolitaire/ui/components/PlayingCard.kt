@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nowlsantos.nowlsolitaire.domain.model.Card
@@ -343,6 +344,7 @@ fun EmptyPileSlot(
     colors: TableColors,
     modifier: Modifier = Modifier,
     label: String? = null,
+    labelFontSize: TextUnit? = null,
     showRefreshIcon: Boolean = false,
     isHighlighted: Boolean = false,
     isDropTarget: Boolean = false,
@@ -390,11 +392,15 @@ fun EmptyPileSlot(
                 modifier = Modifier.size((cardWidth * 0.45f).coerceIn(18.dp, 28.dp))
             )
             label != null -> {
-                val labelFontSize = (cardWidth.value * 0.34f).coerceIn(13f, 22f).sp
-                val labelStyle = remember(labelFontSize) {
+                val effectiveFontSize = labelFontSize ?: run {
+                    val scaleFactor = if (label.length > 2) 0.22f else 0.34f
+                    val minSize = if (label.length > 2) 11f else 13f
+                    (cardWidth.value * scaleFactor).coerceIn(minSize, 22f).sp
+                }
+                val labelStyle = remember(effectiveFontSize) {
                     TextStyle(
                         color = Color.White.copy(alpha = 0.4f),
-                        fontSize = labelFontSize,
+                        fontSize = effectiveFontSize,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -406,6 +412,7 @@ fun EmptyPileSlot(
         }
     }
 }
+/*
 
 @Preview(showBackground = true, backgroundColor = 0xFF145A32)
 @Composable
@@ -443,3 +450,4 @@ private fun PlayingCardPreview() {
         )
     }
 }
+*/

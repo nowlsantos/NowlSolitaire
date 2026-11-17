@@ -67,6 +67,7 @@ internal fun WastePileView(
                 cardHeight = cardHeight,
                 colors = colors,
                 label = "Waste",
+                labelFontSize = 14.sp,
                 onClick = null,
                 modifier = Modifier.graphicsLayer {
                     val showEmpty = waste.isEmpty() || (waste.size == 1 && topFlyingState?.value == true)
@@ -123,7 +124,7 @@ internal fun WastePileView(
         Text(
             text = "Waste",
             color = colors.barContent.copy(alpha = 0.8f),
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
     }

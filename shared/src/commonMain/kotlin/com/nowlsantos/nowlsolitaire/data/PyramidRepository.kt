@@ -2,6 +2,7 @@ package com.nowlsantos.nowlsolitaire.data
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nowlsantos.nowlsolitaire.domain.model.GameStats
@@ -30,9 +31,15 @@ class DataStorePyramidRepository(
 ) : PyramidRepository {
 
     override val settingsFlow: Flow<PyramidSettings> = dataStore.data.map { prefs ->
-        prefs[KEY_SETTINGS]?.let { raw ->
-            runCatching { json.decodeFromString<PyramidSettings>(raw) }.getOrNull()
+        val raw = prefs[KEY_SETTINGS]
+        val settings = raw?.let {
+            runCatching { json.decodeFromString<PyramidSettings>(it) }.getOrNull()
         } ?: PyramidSettings()
+        if (prefs[KEY_TIMER_MIGRATED] != true) {
+            settings.copy(showTimer = false)
+        } else {
+            settings
+        }
     }
 
     override val statsFlow: Flow<GameStats> = dataStore.data.map { prefs ->
@@ -58,10 +65,17 @@ class DataStorePyramidRepository(
 
     override suspend fun updateSettings(transform: (PyramidSettings) -> PyramidSettings) {
         dataStore.edit { prefs ->
-            val current = prefs[KEY_SETTINGS]?.let { raw ->
-                runCatching { json.decodeFromString<PyramidSettings>(raw) }.getOrNull()
+            val raw = prefs[KEY_SETTINGS]
+            val current = raw?.let {
+                runCatching { json.decodeFromString<PyramidSettings>(it) }.getOrNull()
             } ?: PyramidSettings()
-            prefs[KEY_SETTINGS] = json.encodeToString(transform(current))
+            val effective = if (prefs[KEY_TIMER_MIGRATED] != true) {
+                current.copy(showTimer = false)
+            } else {
+                current
+            }
+            prefs[KEY_SETTINGS] = json.encodeToString(transform(effective))
+            prefs[KEY_TIMER_MIGRATED] = true
         }
     }
 
@@ -88,8 +102,11 @@ class DataStorePyramidRepository(
                 currentStreak = newStreak,
                 bestStreak = maxOf(current.bestStreak, newStreak),
                 bestScore = maxOf(current.bestScore, score),
-                bestTimeSeconds = current.bestTimeSeconds?.let { minOf(it, elapsedSeconds) }
-                    ?: elapsedSeconds
+                bestTimeSeconds = if (elapsedSeconds > 0) {
+                    current.bestTimeSeconds?.let { minOf(it, elapsedSeconds) } ?: elapsedSeconds
+                } else {
+                    current.bestTimeSeconds
+                }
             )
             prefs[KEY_STATS] = json.encodeToString(updated)
         }
@@ -105,5 +122,6 @@ class DataStorePyramidRepository(
         val KEY_SETTINGS = stringPreferencesKey("pyramid_settings_json")
         val KEY_STATS = stringPreferencesKey("pyramid_stats_json")
         val KEY_SAVED_GAME = stringPreferencesKey("pyramid_saved_game_json")
+        val KEY_TIMER_MIGRATED = booleanPreferencesKey("pyramid_timer_default_migrated_v1")
     }
 }

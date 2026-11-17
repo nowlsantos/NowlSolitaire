@@ -89,7 +89,7 @@ internal fun StockPile(
                     onClick = { onIntent(KlondikeIntent.DrawOrRecycle) }
                 )
             }
-            Surface(
+            /*Surface(
                 color = Color(0xAA000000),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
@@ -103,7 +103,7 @@ internal fun StockPile(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                 )
-            }
+            }*/
         }
 
         val deckPasses = boardState.gameState.deckPasses

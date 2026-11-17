@@ -54,7 +54,7 @@ fun GameTopBar(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
-    showTimer: Boolean = true
+    showTimer: Boolean = false
 ) {
     val containerSize = LocalWindowInfo.current.containerSize
     val isLandscape = containerSize.width > containerSize.height

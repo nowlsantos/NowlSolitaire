@@ -156,9 +156,21 @@ object PyramidRules {
     fun hasAnyMovesLeft(state: PyramidGameState): Boolean {
         if (state.isWon) return false
         if (findAvailableMoves(state).isNotEmpty()) return true
-        if (state.stock.isNotEmpty()) return true
-        if (state.canRecycleStock) return true
-        return false
+        if (state.stock.isEmpty() && !state.canRecycleStock) return false
+
+        var sim = state
+        val seenCycles = HashSet<Pair<List<Card>, List<Card>>>()
+        while (true) {
+            val next = PyramidEngine.drawOrRecycle(sim) ?: return false
+            if (findAvailableMoves(next).isNotEmpty()) {
+                return true
+            }
+            val cycleKey = next.stock to next.waste
+            if (!seenCycles.add(cycleKey)) {
+                return false
+            }
+            sim = next
+        }
     }
 
     fun findBestHint(state: PyramidGameState): PyramidMatch? {

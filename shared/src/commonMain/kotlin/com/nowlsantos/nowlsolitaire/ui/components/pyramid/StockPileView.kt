@@ -114,7 +114,7 @@ internal fun StockPileView(
                 }
 
                 // Remaining stock badge
-                Surface(
+                /*Surface(
                     shape = CircleShape,
                     color = Color(0xCC000000),
                     modifier = Modifier
@@ -128,7 +128,7 @@ internal fun StockPileView(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                }
+                }*/
             } else if (gameState.canRecycleStock) {
                 EmptyPileSlot(
                     cardWidth = cardWidth,
@@ -234,7 +234,7 @@ internal fun StockDrawButton(
         Text(
             text = labelText,
             color = colors.barContent.copy(alpha = if (canAct) 0.8f else 0.35f),
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
     }

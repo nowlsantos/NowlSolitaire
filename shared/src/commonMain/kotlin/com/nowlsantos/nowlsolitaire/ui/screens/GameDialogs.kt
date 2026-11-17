@@ -175,7 +175,7 @@ fun WinOverlay(
     moveCount: Int,
     onReplay: () -> Unit,
     onNewDeal: () -> Unit,
-    showTimer: Boolean = true
+    showTimer: Boolean = false
 ) {
     Box(
         modifier = Modifier

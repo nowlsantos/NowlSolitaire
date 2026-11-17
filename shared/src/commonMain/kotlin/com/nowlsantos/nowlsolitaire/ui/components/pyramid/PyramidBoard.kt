@@ -415,19 +415,14 @@ fun PyramidBoard(
             }
     ) {
         val isLandscape = maxWidth > maxHeight
-        val hPadding = if (isLandscape) 16.dp else 6.dp
-        val vPadding = if (isLandscape) 4.dp else 8.dp
+        val hPadding = if (isLandscape) 12.dp else 4.dp
+        val vPadding = if (isLandscape) 4.dp else 6.dp
         val availableW = (maxWidth - (hPadding * 2)).coerceAtLeast(0.dp)
         val availableH = (maxHeight - (vPadding * 2)).coerceAtLeast(0.dp)
 
         // Dynamic card sizing:
-        // In portrait mode, the width of the pyramid tableau should occupy at most the screen width (7 columns with gaps).
-        // In landscape mode, the height of the tableau and play area should occupy the height of the screen.
-        val horizontalGap = if (isLandscape) {
-            (availableW * 0.008f).coerceIn(3.dp, 8.dp)
-        } else {
-            (availableW * 0.012f).coerceIn(3.dp, 8.dp)
-        }
+        // Tighter horizontal and vertical spacing in the pyramid tableau lets cards scale larger dynamically.
+        val horizontalGap = (availableW * 0.004f).coerceIn(1.5.dp, 4.dp)
         val totalHorizontalGaps = horizontalGap * 6
 
         // Width-derived limit: 7 cards in bottom tier
@@ -436,20 +431,21 @@ fun PyramidBoard(
         // Height-derived limit:
         // Total height = pyramidTotalHeight + tableauPilesGap + playAreaHeight
         // pyramidTotalHeight = (6 * verticalOverlap) + cardHeight
-        // In portrait: verticalOverlap = 0.50f * cardHeight, play area + gaps ≈ 1.6f * cardHeight -> denominator ≈ 5.6f
-        // In landscape: verticalOverlap = 0.42f * cardHeight, tableauPilesGap = 16.dp, playArea extra ≈ 20.dp
-        val tableauPilesGap = if (isLandscape) 16.dp else 8.dp
+        // Portrait: verticalOverlap = 0.44f * cardHeight -> pyramid = 3.64f * cardHeight, playArea = 1.0f * cardHeight + ~30.dp, gap = 6.dp
+        // Landscape: verticalOverlap = 0.37f * cardHeight -> pyramid = 3.22f * cardHeight, playArea = 1.0f * cardHeight + ~24.dp, gap = 10.dp
+        val verticalOverlapRatio = if (isLandscape) 0.37f else 0.44f
+        val tableauPilesGap = if (isLandscape) 10.dp else 6.dp
         val maxCardHeightFromHeight = if (isLandscape) {
-            (availableH - 36.dp).coerceAtLeast(0.dp) / 4.52f
+            (availableH - 34.dp).coerceAtLeast(0.dp) / 4.22f
         } else {
-            availableH / 5.6f
+            (availableH - 36.dp).coerceAtLeast(0.dp) / 4.64f
         }
         val maxCardWidthFromHeight = maxCardHeightFromHeight / 1.4f
 
         val calculatedWidth = minOf(maxCardWidthFromWidth, maxCardWidthFromHeight)
         val cardWidth = calculatedWidth.coerceAtLeast(28.dp)
         val cardHeight = cardWidth * 1.4f
-        val verticalOverlap = if (isLandscape) cardHeight * 0.42f else cardHeight * 0.50f
+        val verticalOverlap = cardHeight * verticalOverlapRatio
         val pyramidTotalHeight = (verticalOverlap * 6) + cardHeight
         val boardContentWidth = (cardWidth * 7) + totalHorizontalGaps
 
@@ -486,7 +482,7 @@ fun PyramidBoard(
                     .width(boardContentWidth)
                     .padding(
                         horizontal = if (isLandscape) 12.dp else 8.dp,
-                        vertical = if (isLandscape) 2.dp else 6.dp
+                        vertical = if (isLandscape) 2.dp else 4.dp
                     ),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically

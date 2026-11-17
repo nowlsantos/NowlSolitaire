@@ -1,12 +1,17 @@
 package com.nowlsantos.nowlsolitaire.domain.engine
 
 import com.nowlsantos.nowlsolitaire.domain.model.Card
+import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameState
 import com.nowlsantos.nowlsolitaire.domain.model.HintMove
 import com.nowlsantos.nowlsolitaire.domain.model.PileLocation
 import com.nowlsantos.nowlsolitaire.domain.model.Rank
 
 object KlondikeEngine {
+
+    private const val MAX_HINT_SEARCH_STATES = 800
+    private const val MAX_HINT_SEARCH_DEPTH = 8
+    private const val MAX_FOUNDATION_PULLS = 2
 
     fun drawOrRecycle(state: GameState): GameState? {
         if (state.stock.isEmpty() && state.waste.isEmpty()) return null
@@ -186,30 +191,7 @@ object KlondikeEngine {
             }
         }
 
-        // 3b. Any other Tableau -> Tableau moves, ONLY if the move makes real progress
-        // (i.e. enables moving the newly exposed card, enables a foundation move, enables uncovering
-        // a face-down card elsewhere, or enables playing an unburied waste/stock card).
-        for (col in 0 until GameState.TABLEAU_COUNT) {
-            val column = state.tableau[col]
-            for (cardIdx in column.indices) {
-                if (!column[cardIdx].isFaceUp) continue
-                if (cardIdx == 0 && column[cardIdx].rank == Rank.KING) continue
-
-                for (targetCol in 0 until GameState.TABLEAU_COUNT) {
-                    if (targetCol == col) continue
-                    if (state.tableau[targetCol].isEmpty() && cardIdx == 0) continue
-
-                    val target = PileLocation.Tableau(targetCol)
-                    if (KlondikeRules.isValidMove(state, PileLocation.Tableau(col), cardIdx, target)) {
-                        if (isProgressiveLateralMove(state, col, cardIdx, targetCol)) {
-                            return HintMove(PileLocation.Tableau(col), cardIdx, target)
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. Waste -> Tableau
+        // 3b. Waste -> Tableau
         if (state.waste.isNotEmpty()) {
             val wasteIndex = state.waste.lastIndex
             for (targetCol in 0 until GameState.TABLEAU_COUNT) {
@@ -220,45 +202,43 @@ object KlondikeEngine {
             }
         }
 
-        // 5. Draw from Stock or recycle Waste only if stock can produce a playable card
+        // 4. Draw from Stock or recycle Waste if stock/waste passes can produce a playable card
         if (canStockProduceMove(state, drawCount)) {
             return HintMove(PileLocation.Stock, 0, PileLocation.Waste)
         }
 
-        return null
+        // 5. Multi-step Tableau reorganizations and Foundation -> Tableau pull-downs that unlock progress
+        return findProgressiveSequenceFirstMove(state, drawCount)
+    }
+
+    fun hasAvailableMoves(state: GameState, drawCount: Int = state.drawMode.drawCount): Boolean {
+        return findHint(state, drawCount) != null
     }
 
     fun canStockProduceMove(state: GameState, drawCount: Int = state.drawMode.drawCount): Boolean {
-        if (state.stock.isEmpty() && !state.canRecycleStock) return false
-
-        // Fast path for Draw 1: every accessible card in stock (and waste if recyclable) will become exposed.
-        if (drawCount == 1) {
-            val topWaste = state.waste.lastOrNull()
-            if (topWaste != null && isCardPlayable(state, topWaste)) return true
-            if (state.stock.any { isCardPlayable(state, it) }) return true
-            if (state.canRecycleStock && state.waste.any { isCardPlayable(state, it) }) return true
-            return false
-        }
-
-        // Fast path for Draw 3: check accessible cards without cloning lists
-        val totalStock = state.stock.size
-        if (totalStock > 0) {
-            var idx = totalStock - drawCount
-            while (idx >= 0) {
-                if (isCardPlayable(state, state.stock[idx])) return true
-                idx -= drawCount
-            }
-            // Remainder card when stock exhausts
-            if ((totalStock % drawCount) != 0 && isCardPlayable(state, state.stock[0])) {
-                return true
-            }
-        }
         val topWaste = state.waste.lastOrNull()
         if (topWaste != null && isCardPlayable(state, topWaste)) return true
 
-        if (state.canRecycleStock && state.waste.any { isCardPlayable(state, it) }) return true
+        if (state.stock.isEmpty() && !state.canRecycleStock) return false
 
-        return false
+        var sim = if (state.drawMode.drawCount == drawCount) {
+            state
+        } else {
+            state.copy(drawMode = if (drawCount >= 3) DrawMode.DRAW_THREE else DrawMode.DRAW_ONE)
+        }
+        val seenCycles = HashSet<Pair<List<Card>, List<Card>>>()
+        while (true) {
+            val next = drawOrRecycle(sim) ?: return false
+            val nextTop = next.waste.lastOrNull()
+            if (nextTop != null && isCardPlayable(state, nextTop)) {
+                return true
+            }
+            val cycleKey = next.stock to next.waste
+            if (!seenCycles.add(cycleKey)) {
+                return false
+            }
+            sim = next
+        }
     }
 
     private fun isCardPlayable(state: GameState, card: Card): Boolean {
@@ -272,63 +252,145 @@ object KlondikeEngine {
         return false
     }
 
-    private fun isProgressiveLateralMove(
+    private data class BoardKey(
+        val tableau: List<List<Card>>,
+        val foundationTops: List<Card>
+    ) {
+        companion object {
+            fun from(state: GameState): BoardKey = BoardKey(
+                tableau = state.tableau,
+                foundationTops = state.foundations
+                    .mapNotNull { it.lastOrNull() }
+                    .sortedBy { it.suit.ordinal }
+            )
+        }
+    }
+
+    private data class SearchNode(
+        val state: GameState,
+        val firstMove: HintMove?,
+        val depth: Int,
+        val foundationPulls: Int
+    )
+
+    private fun countFaceDownCards(state: GameState): Int {
+        var count = 0
+        for (col in state.tableau) {
+            for (card in col) {
+                if (!card.isFaceUp) count++
+            }
+        }
+        return count
+    }
+
+    private fun countFoundationCards(state: GameState): Int {
+        var count = 0
+        for (pile in state.foundations) {
+            count += pile.size
+        }
+        return count
+    }
+
+    private fun findProgressiveSequenceFirstMove(
+        initialState: GameState,
+        drawCount: Int
+    ): HintMove? {
+        val initialFaceDownCount = countFaceDownCards(initialState)
+        val initialFoundationCount = countFoundationCards(initialState)
+
+        val queue = ArrayDeque<SearchNode>()
+        val visited = HashSet<BoardKey>()
+        visited.add(BoardKey.from(initialState))
+        queue.addLast(SearchNode(state = initialState, firstMove = null, depth = 0, foundationPulls = 0))
+
+        while (queue.isNotEmpty() && visited.size < MAX_HINT_SEARCH_STATES) {
+            val node = queue.removeFirst()
+            if (node.depth >= MAX_HINT_SEARCH_DEPTH) continue
+            val curr = node.state
+
+            // 1. Tableau -> Tableau moves (including splitting face-up runs & freeing columns)
+            for (col in 0 until GameState.TABLEAU_COUNT) {
+                val column = curr.tableau[col]
+                for (cardIdx in column.indices) {
+                    if (!column[cardIdx].isFaceUp) continue
+                    val isBaseKing = cardIdx == 0 && column[cardIdx].rank == Rank.KING
+                    for (targetCol in 0 until GameState.TABLEAU_COUNT) {
+                        if (targetCol == col) continue
+                        if (isBaseKing && curr.tableau[targetCol].isEmpty()) continue
+                        if (cardIdx == 0 && curr.tableau[targetCol].isEmpty()) continue
+
+                        val from = PileLocation.Tableau(col)
+                        val to = PileLocation.Tableau(targetCol)
+                        val nextState = moveCards(curr, from, cardIdx, to) ?: continue
+                        val firstMove = node.firstMove ?: HintMove(from, cardIdx, to)
+
+                        if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, drawCount)) {
+                            return firstMove
+                        }
+                        if (visited.size < MAX_HINT_SEARCH_STATES && visited.add(BoardKey.from(nextState))) {
+                            queue.addLast(SearchNode(nextState, firstMove, node.depth + 1, node.foundationPulls))
+                        }
+                    }
+                }
+            }
+
+            // 2. Tableau -> Foundation (can combine with Foundation pull-downs)
+            for (col in 0 until GameState.TABLEAU_COUNT) {
+                val column = curr.tableau[col]
+                if (column.isEmpty()) continue
+                val topIdx = column.lastIndex
+                val target = KlondikeRules.findBestFoundationTarget(curr, column[topIdx]) ?: continue
+                val from = PileLocation.Tableau(col)
+                val nextState = moveCards(curr, from, topIdx, target) ?: continue
+                val firstMove = node.firstMove ?: HintMove(from, topIdx, target)
+
+                if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, drawCount)) {
+                    return firstMove
+                }
+                if (visited.size < MAX_HINT_SEARCH_STATES && visited.add(BoardKey.from(nextState))) {
+                    queue.addLast(SearchNode(nextState, firstMove, node.depth + 1, node.foundationPulls))
+                }
+            }
+
+            // 3. Foundation -> Tableau pull-downs (bounded to avoid pointless cascading)
+            if (node.foundationPulls < MAX_FOUNDATION_PULLS) {
+                for (fIdx in 0 until GameState.FOUNDATION_COUNT) {
+                    val pile = curr.foundations[fIdx]
+                    if (pile.isEmpty()) continue
+                    val topIdx = pile.lastIndex
+                    val from = PileLocation.Foundation(fIdx)
+                    for (targetCol in 0 until GameState.TABLEAU_COUNT) {
+                        val to = PileLocation.Tableau(targetCol)
+                        val nextState = moveCards(curr, from, topIdx, to) ?: continue
+                        val firstMove = node.firstMove ?: HintMove(from, topIdx, to)
+
+                        if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, drawCount)) {
+                            return firstMove
+                        }
+                        if (visited.size < MAX_HINT_SEARCH_STATES && visited.add(BoardKey.from(nextState))) {
+                            queue.addLast(
+                                SearchNode(nextState, firstMove, node.depth + 1, node.foundationPulls + 1)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun isProgressAchieved(
         state: GameState,
-        fromCol: Int,
-        cardIdx: Int,
-        toCol: Int
+        initialFaceDownCount: Int,
+        initialFoundationCount: Int,
+        drawCount: Int
     ): Boolean {
-        val nextState = moveCards(state, PileLocation.Tableau(fromCol), cardIdx, PileLocation.Tableau(toCol)) ?: return false
-
-        // 1. In nextState, does the newly exposed card in fromCol have any valid move?
-        val exposedIndex = cardIdx - 1
-        if (exposedIndex >= 0 && fromCol < nextState.tableau.size) {
-            val exposedColumn = nextState.tableau[fromCol]
-            if (exposedIndex in exposedColumn.indices && exposedColumn[exposedIndex].isFaceUp) {
-                val exposedCard = exposedColumn[exposedIndex]
-                if (KlondikeRules.findBestFoundationTarget(nextState, exposedCard) != null) return true
-                for (otherCol in 0 until GameState.TABLEAU_COUNT) {
-                    if (otherCol != fromCol && KlondikeRules.isValidMove(nextState, PileLocation.Tableau(fromCol), exposedIndex, PileLocation.Tableau(otherCol))) {
-                        return true
-                    }
-                }
-            }
+        if (countFaceDownCards(state) < initialFaceDownCount) return true
+        if (countFoundationCards(state) > initialFoundationCount) return true
+        if ((state.stock.isNotEmpty() || state.waste.isNotEmpty()) && canStockProduceMove(state, drawCount)) {
+            return true
         }
-
-        // 2. Does nextState allow ANY tableau card to move to foundation?
-        for (col in 0 until GameState.TABLEAU_COUNT) {
-            val colCards = nextState.tableau[col]
-            if (colCards.isNotEmpty()) {
-                if (KlondikeRules.findBestFoundationTarget(nextState, colCards.last()) != null) return true
-            }
-        }
-
-        // 3. Does nextState allow top waste to move to foundation?
-        if (nextState.waste.isNotEmpty()) {
-            if (KlondikeRules.findBestFoundationTarget(nextState, nextState.waste.last()) != null) return true
-        }
-
-        // 4. Does nextState uncover a face-down card anywhere?
-        for (col in 0 until GameState.TABLEAU_COUNT) {
-            val firstFaceUp = nextState.tableau[col].indexOfFirst { it.isFaceUp }
-            if (firstFaceUp > 0) {
-                for (target in 0 until GameState.TABLEAU_COUNT) {
-                    if (target != col && KlondikeRules.isValidMove(nextState, PileLocation.Tableau(col), firstFaceUp, PileLocation.Tableau(target))) {
-                        return true
-                    }
-                }
-            }
-        }
-
-        // 5. Does nextState allow a waste card to move to tableau?
-        if (nextState.waste.isNotEmpty()) {
-            for (target in 0 until GameState.TABLEAU_COUNT) {
-                if (KlondikeRules.isValidMove(nextState, PileLocation.Waste, nextState.waste.lastIndex, PileLocation.Tableau(target))) {
-                    return true
-                }
-            }
-        }
-
         return false
     }
 }
