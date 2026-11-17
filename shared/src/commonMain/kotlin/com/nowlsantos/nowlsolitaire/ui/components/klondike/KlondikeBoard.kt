@@ -231,11 +231,13 @@ fun KlondikeBoard(
                     val releaseDelta = dragOffsetState.value
                     hoveredTarget = null
                     val distance = releaseDelta.getDistance()
-                    if (distance < 1f) {
+                    val tapThresholdPx = with(density) { 22.dp.toPx() }
+                    if (distance < tapThresholdPx) {
                         isReturningHolder.value = false
                         returnProgressState.floatValue = 0f
                         dragOffsetState.value = Offset.Zero
                         activeDragState.value = null
+                        latestOnIntent(KlondikeIntent.TapPileOrCard(drag.from, drag.cardIndex))
                     } else {
                         isReturningHolder.value = true
                         returnJobHolder.value?.cancel()

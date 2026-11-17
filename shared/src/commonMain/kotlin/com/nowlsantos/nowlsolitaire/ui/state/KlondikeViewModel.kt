@@ -322,8 +322,18 @@ class KlondikeViewModel(
                 return
             }
 
-            // If invalid move, either switch selection to tapped playable card or clear selection.
+            // If invalid move from previous selection to this destination:
+            // Check if the newly tapped card itself can be auto-moved!
             val newSelectable = resolveSelectableIndex(location, cardIndex)
+            if (newSelectable != null && _uiState.value.settings.tapToAutoMove) {
+                val autoMoved = session.autoMove(location, newSelectable)
+                if (autoMoved !== session) {
+                    applyNewSession(autoMoved)
+                    return
+                }
+            }
+
+            // If it cannot auto-move, either switch selection to tapped playable card or clear selection.
             _uiState.update {
                 it.copy(
                     selection = newSelectable?.let { idx -> CardSelection(location, idx) },
