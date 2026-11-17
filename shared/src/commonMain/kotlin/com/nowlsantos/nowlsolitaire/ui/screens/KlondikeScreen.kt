@@ -33,6 +33,7 @@ import com.nowlsantos.nowlsolitaire.ui.components.GameBottomBar
 import com.nowlsantos.nowlsolitaire.ui.components.GameTopBar
 import com.nowlsantos.nowlsolitaire.ui.components.klondike.KlondikeBoard
 import com.nowlsantos.nowlsolitaire.ui.components.klondike.KlondikeBoardState
+import com.nowlsantos.nowlsolitaire.ui.components.klondike.KlondikeSettingsBottomSheet
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeIntent
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeUiState
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeViewModel
@@ -234,7 +235,7 @@ fun KlondikeScreen(
         }
 
         if (showSettingsSheet) {
-            SettingsBottomSheet(
+            KlondikeSettingsBottomSheet(
                 settings = uiState.settings,
                 onIntent = onIntent,
                 onDismiss = { showSettingsSheet = false }
