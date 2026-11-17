@@ -86,7 +86,10 @@ fun KlondikeScreen(
     var showNewGameDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showStatsDialog by remember { mutableStateOf(false) }
-    var isWaitingForWinFlight by remember(uiState.isWon) { mutableStateOf(uiState.isWon) }
+    var isWaitingForWinFlight by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.isWon) {
+        isWaitingForWinFlight = uiState.isWon
+    }
     val showWinOverlay = uiState.isWon && !isWaitingForWinFlight
 
     val anyModalOpen = showNewGameDialog || showSettingsSheet || showStatsDialog || uiState.showNoMovesDialog

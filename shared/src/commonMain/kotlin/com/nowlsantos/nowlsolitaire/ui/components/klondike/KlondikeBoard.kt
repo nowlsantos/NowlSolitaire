@@ -336,14 +336,14 @@ fun KlondikeBoard(
         { remaining: List<CardFlight> ->
             activeFlightsState.value = remaining
             syncFlyingHiddenStates(remaining)
-            if (remaining.isEmpty() && latestBoardState.isWon) {
+            if (remaining.isEmpty() && latestBoardState.isWon && !latestBoardState.isAutoCompleting) {
                 latestOnWinFlightsSettled()
             }
         }
     }
 
-    LaunchedEffect(boardState.isWon) {
-        if (boardState.isWon && activeFlightsState.value.isEmpty()) {
+    LaunchedEffect(boardState.isWon, boardState.isAutoCompleting, activeFlightsState.value.isEmpty()) {
+        if (boardState.isWon && !boardState.isAutoCompleting && activeFlightsState.value.isEmpty()) {
             latestOnWinFlightsSettled()
         }
     }

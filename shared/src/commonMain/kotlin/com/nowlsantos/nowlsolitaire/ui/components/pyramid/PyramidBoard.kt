@@ -399,7 +399,7 @@ fun PyramidBoard(
         }
     }
 
-    LaunchedEffect(boardState.gameState.isWon) {
+    LaunchedEffect(boardState.gameState.isWon, activeFlightsState.value.isEmpty()) {
         if (boardState.gameState.isWon && activeFlightsState.value.isEmpty()) {
             latestOnWinFlightsSettled()
         }
