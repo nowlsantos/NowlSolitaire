@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameSettings
@@ -75,6 +76,26 @@ fun KlondikeSettingsBottomSheet(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Deal Mode",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilterChip(
+                        selected = settings.dealMode == DealMode.WINNABLE,
+                        onClick = { onIntent(KlondikeIntent.UpdateDealMode(DealMode.WINNABLE)) },
+                        label = { Text("Winnable (Recommended)") }
+                    )
+                    FilterChip(
+                        selected = settings.dealMode == DealMode.RANDOM,
+                        onClick = { onIntent(KlondikeIntent.UpdateDealMode(DealMode.RANDOM)) },
+                        label = { Text("Random") }
+                    )
+                }
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(

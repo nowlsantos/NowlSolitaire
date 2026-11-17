@@ -1,9 +1,11 @@
 package com.nowlsantos.nowlsolitaire.domain.engine
 
 import com.nowlsantos.nowlsolitaire.domain.model.Card
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameState
+import com.nowlsantos.nowlsolitaire.domain.model.KlondikeWinnableSeeds
 import com.nowlsantos.nowlsolitaire.domain.model.Rank
 import com.nowlsantos.nowlsolitaire.domain.model.Suit
 import kotlin.random.Random
@@ -20,9 +22,15 @@ object DeckDealer {
     fun dealNewGame(
         drawMode: DrawMode = DrawMode.DRAW_ONE,
         deckPasses: DeckPasses = DeckPasses.UNLIMITED,
-        seed: Long = Random.nextLong()
+        dealMode: DealMode = DealMode.WINNABLE,
+        seed: Long? = null
     ): GameState {
-        val shuffledDeck = createStandardDeck().shuffled(Random(seed))
+        val resolvedSeed = seed ?: if (dealMode == DealMode.WINNABLE) {
+            KlondikeWinnableSeeds.randomSeed()
+        } else {
+            Random.nextLong()
+        }
+        val shuffledDeck = createStandardDeck().shuffled(Random(resolvedSeed))
         val tableau = MutableList(GameState.TABLEAU_COUNT) { emptyList<Card>() }
 
         var cursor = 0
@@ -49,7 +57,7 @@ object DeckDealer {
             score = 0,
             moveCount = 0,
             recycleCount = 0,
-            seed = seed
+            seed = resolvedSeed
         )
     }
 }

@@ -7,6 +7,7 @@ import com.nowlsantos.nowlsolitaire.domain.engine.PyramidEngine
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidInteractionResult
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidRules
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidSession
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
 import com.nowlsantos.nowlsolitaire.domain.model.SavedPyramidGameSnapshot
@@ -72,6 +73,7 @@ class PyramidViewModel(
             is PyramidIntent.UpdateTableTheme -> updateSettings { it.copy(tableTheme = intent.theme) }
             is PyramidIntent.UpdateCardBackTheme -> updateSettings { it.copy(cardBackTheme = intent.cardBackTheme) }
             is PyramidIntent.UpdateMaxRecycles -> updateMaxRecycles(intent.maxRecycles)
+            is PyramidIntent.UpdateDealMode -> updateDealMode(intent.dealMode)
             is PyramidIntent.UpdateShowTimer -> updateSettings { it.copy(showTimer = intent.enabled) }
             PyramidIntent.ResetStats -> viewModelScope.launch { repository.resetStats() }
         }
@@ -137,7 +139,10 @@ class PyramidViewModel(
 
     private fun startFreshDeal(settings: PyramidSettings) {
         val dealId = nextDealId++
-        session = PyramidSession.newGame(maxRecycles = settings.maxRecycles)
+        session = PyramidSession.newGame(
+            maxRecycles = settings.maxRecycles,
+            dealMode = settings.dealMode
+        )
         hasStartedMoving = false
         recordedAsPlayed = false
         recordedAsWon = false
@@ -334,6 +339,15 @@ class PyramidViewModel(
                 )
             }
             persistCurrentGame()
+        }
+    }
+
+    private fun updateDealMode(dealMode: DealMode) {
+        viewModelScope.launch {
+            repository.updateSettings { it.copy(dealMode = dealMode) }
+            if (!hasStartedMoving) {
+                startFreshDeal(_uiState.value.settings.copy(dealMode = dealMode))
+            }
         }
     }
 

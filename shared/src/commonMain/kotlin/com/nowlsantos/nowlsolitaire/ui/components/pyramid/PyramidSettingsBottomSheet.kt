@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +74,27 @@ fun PyramidSettingsBottomSheet(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+
+            // Deal Mode
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Deal Mode",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilterChip(
+                        selected = settings.dealMode == DealMode.WINNABLE,
+                        onClick = { onIntent(PyramidIntent.UpdateDealMode(DealMode.WINNABLE)) },
+                        label = { Text("Winnable (Recommended)") }
+                    )
+                    FilterChip(
+                        selected = settings.dealMode == DealMode.RANDOM,
+                        onClick = { onIntent(PyramidIntent.UpdateDealMode(DealMode.RANDOM)) },
+                        label = { Text("Random") }
+                    )
+                }
+            }
 
             // Redeal limit
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

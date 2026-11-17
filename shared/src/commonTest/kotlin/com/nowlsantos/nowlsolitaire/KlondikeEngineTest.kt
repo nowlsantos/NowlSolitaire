@@ -1,11 +1,14 @@
 package com.nowlsantos.nowlsolitaire
 
+import com.nowlsantos.nowlsolitaire.domain.engine.DeckDealer
 import com.nowlsantos.nowlsolitaire.domain.engine.KlondikeEngine
 import com.nowlsantos.nowlsolitaire.domain.model.Card
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameState
 import com.nowlsantos.nowlsolitaire.domain.model.HintMove
+import com.nowlsantos.nowlsolitaire.domain.model.KlondikeWinnableSeeds
 import com.nowlsantos.nowlsolitaire.domain.model.PileLocation
 import com.nowlsantos.nowlsolitaire.domain.model.Rank
 import com.nowlsantos.nowlsolitaire.domain.model.Suit
@@ -17,6 +20,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class KlondikeEngineTest {
+
+    @Test
+    fun winnableDealMode_selectsFromCuratedSeeds() {
+        val state = DeckDealer.dealNewGame(dealMode = DealMode.WINNABLE)
+        assertTrue(KlondikeWinnableSeeds.SEEDS.contains(state.seed))
+    }
 
     private fun card(suit: Suit, rank: Rank, faceUp: Boolean = true) =
         Card(suit = suit, rank = rank, isFaceUp = faceUp)

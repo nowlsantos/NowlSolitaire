@@ -7,6 +7,7 @@ import com.nowlsantos.nowlsolitaire.domain.engine.DeckDealer
 import com.nowlsantos.nowlsolitaire.domain.engine.KlondikeEngine
 import com.nowlsantos.nowlsolitaire.domain.engine.KlondikeRules
 import com.nowlsantos.nowlsolitaire.domain.engine.KlondikeSession
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameSettings
@@ -82,6 +83,7 @@ class KlondikeViewModel(
             }
             is KlondikeIntent.UpdateDrawMode -> updateDrawMode(intent.drawMode)
             is KlondikeIntent.UpdateDeckPasses -> updateDeckPasses(intent.deckPasses)
+            is KlondikeIntent.UpdateDealMode -> updateDealMode(intent.dealMode)
             is KlondikeIntent.UpdateTableTheme -> updateSettings { it.copy(tableTheme = intent.theme) }
             is KlondikeIntent.UpdateCardBackTheme -> updateSettings { it.copy(cardBackTheme = intent.cardBackTheme) }
             is KlondikeIntent.UpdateLeftHanded -> updateSettings { it.copy(leftHanded = intent.leftHanded) }
@@ -132,7 +134,11 @@ class KlondikeViewModel(
                     )
                 }
             } else {
-                val fresh = deckDealer.dealNewGame(drawMode = settings.drawMode, deckPasses = settings.deckPasses)
+                val fresh = deckDealer.dealNewGame(
+                    drawMode = settings.drawMode,
+                    deckPasses = settings.deckPasses,
+                    dealMode = settings.dealMode
+                )
                 session = KlondikeSession(currentState = fresh)
                 hasStartedMoving = false
                 recordedAsPlayed = false
@@ -170,13 +176,21 @@ class KlondikeViewModel(
 
     private fun startNewGame(
         drawModeOverride: DrawMode? = null,
-        deckPassesOverride: DeckPasses? = null
+        deckPassesOverride: DeckPasses? = null,
+        dealModeOverride: DealMode? = null
     ) {
         autoCompleteJob?.cancel()
         deadlockJob?.cancel()
         val drawMode = drawModeOverride ?: _uiState.value.settings.drawMode
         val deckPasses = deckPassesOverride ?: _uiState.value.settings.deckPasses
-        session = KlondikeSession(currentState = deckDealer.dealNewGame(drawMode = drawMode, deckPasses = deckPasses))
+        val dealMode = dealModeOverride ?: _uiState.value.settings.dealMode
+        session = KlondikeSession(
+            currentState = deckDealer.dealNewGame(
+                drawMode = drawMode,
+                deckPasses = deckPasses,
+                dealMode = dealMode
+            )
+        )
         hasStartedMoving = false
         recordedAsPlayed = false
         recordedAsWon = false
@@ -503,6 +517,15 @@ class KlondikeViewModel(
                 _uiState.update { it.copy(gameState = updatedState, showNoMovesDialog = false) }
                 persistCurrentGame()
                 scheduleDeadlockCheck()
+            }
+        }
+    }
+
+    private fun updateDealMode(dealMode: DealMode) {
+        viewModelScope.launch {
+            repository.updateSettings { it.copy(dealMode = dealMode) }
+            if (!hasStartedMoving) {
+                startNewGame(dealModeOverride = dealMode)
             }
         }
     }

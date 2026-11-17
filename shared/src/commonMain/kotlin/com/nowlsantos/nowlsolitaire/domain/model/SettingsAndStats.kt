@@ -20,9 +20,16 @@ enum class CardBackTheme(val displayName: String) {
 }
 
 @Serializable
+enum class DealMode(val displayName: String) {
+    WINNABLE("Winnable Deals"),
+    RANDOM("Random Deals")
+}
+
+@Serializable
 data class GameSettings(
     val drawMode: DrawMode = DrawMode.DRAW_ONE,
     val deckPasses: DeckPasses = DeckPasses.UNLIMITED,
+    val dealMode: DealMode = DealMode.WINNABLE,
     val tableTheme: TableTheme = TableTheme.CLASSIC_GREEN,
     val cardBackTheme: CardBackTheme = CardBackTheme.CLASSIC,
     val leftHanded: Boolean = false,

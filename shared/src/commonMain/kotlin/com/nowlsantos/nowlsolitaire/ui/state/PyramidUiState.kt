@@ -2,6 +2,7 @@ package com.nowlsantos.nowlsolitaire.ui.state
 
 import com.nowlsantos.nowlsolitaire.domain.model.Card
 import com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameStats
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
@@ -53,6 +54,7 @@ sealed interface PyramidIntent {
     data class UpdateTableTheme(val theme: TableTheme) : PyramidIntent
     data class UpdateCardBackTheme(val cardBackTheme: CardBackTheme) : PyramidIntent
     data class UpdateMaxRecycles(val maxRecycles: Int) : PyramidIntent
+    data class UpdateDealMode(val dealMode: DealMode) : PyramidIntent
     data class UpdateShowTimer(val enabled: Boolean) : PyramidIntent
     data object ResetStats : PyramidIntent
 }

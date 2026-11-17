@@ -1,5 +1,6 @@
 package com.nowlsantos.nowlsolitaire.ui.state
 
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.DeckPasses
 import com.nowlsantos.nowlsolitaire.domain.model.DrawMode
 import com.nowlsantos.nowlsolitaire.domain.model.GameSettings
@@ -55,6 +56,7 @@ sealed interface KlondikeIntent {
     data class SetTimerPaused(val paused: Boolean) : KlondikeIntent
     data class UpdateDrawMode(val drawMode: DrawMode) : KlondikeIntent
     data class UpdateDeckPasses(val deckPasses: DeckPasses) : KlondikeIntent
+    data class UpdateDealMode(val dealMode: DealMode) : KlondikeIntent
     data class UpdateTableTheme(val theme: TableTheme) : KlondikeIntent
     data class UpdateCardBackTheme(val cardBackTheme: com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme) : KlondikeIntent
     data class UpdateLeftHanded(val leftHanded: Boolean) : KlondikeIntent

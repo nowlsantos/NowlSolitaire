@@ -1,8 +1,10 @@
 package com.nowlsantos.nowlsolitaire.domain.engine
 
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidMatch
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidWinnableSeeds
 import kotlin.random.Random
 
 data class PyramidSession(
@@ -59,10 +61,18 @@ data class PyramidSession(
 
         fun newGame(
             maxRecycles: Int = PyramidGameState.DEFAULT_MAX_RECYCLES,
-            seed: Long = Random.nextLong()
-        ): PyramidSession = PyramidSession(
-            currentState = PyramidEngine.dealNewGame(seed = seed, maxRecycles = maxRecycles)
-        )
+            dealMode: DealMode = DealMode.WINNABLE,
+            seed: Long? = null
+        ): PyramidSession {
+            val resolvedSeed = seed ?: if (dealMode == DealMode.WINNABLE) {
+                PyramidWinnableSeeds.randomSeed()
+            } else {
+                Random.nextLong()
+            }
+            return PyramidSession(
+                currentState = PyramidEngine.dealNewGame(seed = resolvedSeed, maxRecycles = maxRecycles)
+            )
+        }
 
         fun replayDeal(state: PyramidGameState): PyramidSession = PyramidSession(
             currentState = PyramidEngine.dealNewGame(seed = state.seed, maxRecycles = state.maxRecycles)

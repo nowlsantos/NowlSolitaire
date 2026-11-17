@@ -3,11 +3,14 @@ package com.nowlsantos.nowlsolitaire
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidEngine
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidInteractionResult
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidRules
+import com.nowlsantos.nowlsolitaire.domain.engine.PyramidSession
 import com.nowlsantos.nowlsolitaire.domain.model.Card
+import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidCard
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidMatch
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidWinnableSeeds
 import com.nowlsantos.nowlsolitaire.domain.model.Rank
 import com.nowlsantos.nowlsolitaire.domain.model.Suit
 import kotlin.test.Test
@@ -17,6 +20,12 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class PyramidEngineTest {
+
+    @Test
+    fun winnableDealMode_selectsFromCuratedSeeds() {
+        val session = PyramidSession.newGame(dealMode = DealMode.WINNABLE)
+        assertTrue(PyramidWinnableSeeds.SEEDS.contains(session.currentState.seed))
+    }
 
     @Test
     fun dealAndRecycleKeepStockCardsFaceUp() {
