@@ -20,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,25 +93,23 @@ internal fun StockPileView(
             contentAlignment = Alignment.Center
         ) {
             if (topVisibleStock != null) {
-                key(topVisibleStock.id) {
-                    val onCardClick = remember(topVisibleStock.id, onTapStock) {
-                        {
-                            if (!isDealingState.value) {
-                                onTapStock()
-                            }
+                val onCardClick = remember(onTapStock) {
+                    {
+                        if (!isDealingState.value) {
+                            onTapStock()
                         }
                     }
-                    PlayingCardView(
-                        card = topVisibleStock,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        colors = colors,
-                        isSelected = isSelected,
-                        isHinted = isHinted,
-                        cardBackTheme = cardBackTheme,
-                        onClick = onCardClick
-                    )
                 }
+                PlayingCardView(
+                    card = topVisibleStock,
+                    cardWidth = cardWidth,
+                    cardHeight = cardHeight,
+                    colors = colors,
+                    isSelected = isSelected,
+                    isHinted = isHinted,
+                    cardBackTheme = cardBackTheme,
+                    onClick = onCardClick
+                )
 
                 // Remaining stock badge
                 /*Surface(

@@ -9,11 +9,20 @@ import com.nowlsantos.nowlsolitaire.domain.model.Rank
 
 object PyramidRules {
 
+    private fun findSlot(pyramid: List<PyramidCard>, row: Int, col: Int): PyramidCard? {
+        val expectedIdx = row * (row + 1) / 2 + col
+        val direct = pyramid.getOrNull(expectedIdx)
+        if (direct != null && direct.row == row && direct.col == col) {
+            return direct
+        }
+        return pyramid.firstOrNull { it.row == row && it.col == col }
+    }
+
     fun isExposed(pyramid: List<PyramidCard>, row: Int, col: Int): Boolean {
         if (row < 0 || row >= PyramidGameState.PYRAMID_ROW_COUNT || col < 0 || col > row) {
             return false
         }
-        val targetCard = pyramid.firstOrNull { it.row == row && it.col == col } ?: return false
+        val targetCard = findSlot(pyramid, row, col) ?: return false
         if (targetCard.isRemoved) return false
 
         // Bottom row cards are never covered by children
@@ -21,8 +30,8 @@ object PyramidRules {
             return true
         }
 
-        val leftChild = pyramid.firstOrNull { it.row == row + 1 && it.col == col }
-        val rightChild = pyramid.firstOrNull { it.row == row + 1 && it.col == col + 1 }
+        val leftChild = findSlot(pyramid, row + 1, col)
+        val rightChild = findSlot(pyramid, row + 1, col + 1)
 
         val leftRemoved = leftChild == null || leftChild.isRemoved
         val rightRemoved = rightChild == null || rightChild.isRemoved

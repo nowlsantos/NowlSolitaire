@@ -1,8 +1,11 @@
 package com.nowlsantos.nowlsolitaire.ui.components.klondike
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -16,13 +19,22 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme
-import com.nowlsantos.nowlsolitaire.ui.components.PlayingCardView
+import com.nowlsantos.nowlsolitaire.ui.components.CardBorderWidth
+import com.nowlsantos.nowlsolitaire.ui.components.CardCornerRadius
+import com.nowlsantos.nowlsolitaire.ui.components.drawCardOutline
+import com.nowlsantos.nowlsolitaire.ui.components.getCardDrawableRes
 import com.nowlsantos.nowlsolitaire.ui.theme.TableColors
+import org.jetbrains.compose.resources.imageResource
 import kotlin.math.PI
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
+private val FlightCardShape = RoundedCornerShape(CardCornerRadius)
+
+@Suppress("UNUSED_PARAMETER")
 @Composable
 internal fun FlightOverlay(
     activeFlightsState: State<List<CardFlight>>,
@@ -152,19 +164,33 @@ internal fun FlightOverlay(
                 }
             ) {
                 flight.cards.forEachIndexed { index, card ->
-                    PlayingCardView(
-                        card = card,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        colors = colors,
-                        isSelected = false,
-                        isElevated = true,
-                        elevation = if (flight.isDeal) 0.dp else 6.dp,
-                        flipOnAppear = flight.flipFromBack,
-                        externalFlipProgress = if (flight.flipFromBack) flight.progressState else null,
-                        textMeasurer = textMeasurer,
-                        modifier = Modifier.offset(y = stepDp * index)
-                    )
+                    key(card.id) {
+                        val bitmap = imageResource(getCardDrawableRes(card))
+                        Canvas(
+                            modifier = Modifier
+                                .offset(y = stepDp * index)
+                                .size(cardWidth, cardHeight)
+                                .graphicsLayer {
+                                    shadowElevation = 6.dp.toPx()
+                                    shape = FlightCardShape
+                                    clip = true
+                                }
+                        ) {
+                            val w = size.width.roundToInt()
+                            val h = size.height.roundToInt()
+                            if (w > 0 && h > 0) {
+                                drawImage(
+                                    image = bitmap,
+                                    dstSize = IntSize(w, h)
+                                )
+                                drawCardOutline(
+                                    color = colors.cardBorder,
+                                    strokeWidthDp = CardBorderWidth,
+                                    cornerDp = CardCornerRadius
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

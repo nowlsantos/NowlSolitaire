@@ -187,7 +187,8 @@ fun KlondikeScreen(
                         uiState.isAutoCompleting,
                         uiState.settings.tableTheme,
                         uiState.settings.cardBackTheme,
-                        uiState.settings.leftHanded
+                        uiState.settings.leftHanded,
+                        uiState.dealId
                     ) {
                         KlondikeBoardState(
                             gameState = uiState.gameState,
@@ -196,7 +197,8 @@ fun KlondikeScreen(
                             isAutoCompleting = uiState.isAutoCompleting,
                             tableTheme = uiState.settings.tableTheme,
                             leftHanded = uiState.settings.leftHanded,
-                            cardBackTheme = uiState.settings.cardBackTheme
+                            cardBackTheme = uiState.settings.cardBackTheme,
+                            dealId = uiState.dealId
                         )
                     }
                     KlondikeBoard(

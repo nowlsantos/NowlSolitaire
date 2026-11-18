@@ -23,7 +23,8 @@ data class KlondikeBoardState(
     val isAutoCompleting: Boolean,
     val tableTheme: TableTheme,
     val leftHanded: Boolean,
-    val cardBackTheme: CardBackTheme = CardBackTheme.CLASSIC
+    val cardBackTheme: CardBackTheme = CardBackTheme.CLASSIC,
+    val dealId: Long = 0L
 ) {
     val isWon: Boolean
         get() = gameState.isWon
@@ -34,6 +35,7 @@ internal class NullableOffsetHolder(var value: Offset? = null)
 internal class BooleanHolder(var value: Boolean = false)
 internal class JobHolder(var value: Job? = null)
 internal class IntHolder(var value: Int = 0)
+internal class LongHolder(var value: Long = -1L)
 internal class GameStateHolder(var value: GameState? = null)
 internal class DragDropHolder(var value: DragDropSnapshot? = null)
 

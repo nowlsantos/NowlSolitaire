@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -26,13 +27,13 @@ import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
-import com.nowlsantos.nowlsolitaire.domain.model.Card
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidMatch
 import com.nowlsantos.nowlsolitaire.ui.components.CARD_ASPECT_RATIO
 import com.nowlsantos.nowlsolitaire.ui.state.PyramidIntent
 import com.nowlsantos.nowlsolitaire.ui.theme.toColors
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun PyramidBoard(
@@ -67,9 +68,12 @@ fun PyramidBoard(
     val latestOnWinFlightsSettled by rememberUpdatedState(onWinFlightsSettled)
     val latestOnBoardSettledChanged by rememberUpdatedState(onBoardSettledChanged)
 
-    val isBoardSettled = activeFlightsState.value.isEmpty() && !isDealingState.value
-    LaunchedEffect(isBoardSettled) {
-        latestOnBoardSettledChanged(isBoardSettled)
+    LaunchedEffect(Unit) {
+        snapshotFlow { activeFlightsState.value.isEmpty() && !isDealingState.value }
+            .distinctUntilChanged()
+            .collect { settled ->
+                latestOnBoardSettledChanged(settled)
+            }
     }
 
     val getFlyingHiddenState = remember {
@@ -110,9 +114,10 @@ fun PyramidBoard(
     val activeMatch = boardState.activeMatch
 
     // Synchronous flight initialization for drawn card to eliminate 1-frame flicker
-    val prevActiveDrawCardId = remember { mutableStateOf<String?>(null) }
-    if (activeDrawCard != null && prevActiveDrawCardId.value != activeDrawCard.id) {
-        prevActiveDrawCardId.value = activeDrawCard.id
+    val prevActiveDrawKey = remember { mutableStateOf<Pair<String, Int>?>(null) }
+    val currentDrawKey = activeDrawCard?.let { it.id to gameState.moveCount }
+    if (activeDrawCard != null && currentDrawKey != null && prevActiveDrawKey.value != currentDrawKey) {
+        prevActiveDrawKey.value = currentDrawKey
         val stockOrigin = stockSlotOriginHolder.value
         val wasteOrigin = wasteSlotOriginHolder.value
         val start = if (stockOrigin.isSpecified) stockOrigin else wasteOrigin
@@ -131,8 +136,8 @@ fun PyramidBoard(
             syncFlyingHiddenStates(merged)
         }
     }
-    if (activeDrawCard == null && prevActiveDrawCardId.value != null) {
-        prevActiveDrawCardId.value = null
+    if (activeDrawCard == null && prevActiveDrawKey.value != null) {
+        prevActiveDrawKey.value = null
     }
 
     // Synchronous flight initialization for matches
@@ -204,6 +209,15 @@ fun PyramidBoard(
     val previousGameState = prevGameStateHolder.value
     if (previousGameState !== gameState) {
         prevGameStateHolder.value = gameState
+        if (slotPositions.isNotEmpty()) {
+            for (i in gameState.pyramid.indices) {
+                val pc = gameState.pyramid[i]
+                val slotPos = slotPositions[PyramidLocation.PyramidSlot(pc.row, pc.col)]
+                if (slotPos != null) {
+                    cardOrigins[pc.card.id] = slotPos
+                }
+            }
+        }
         if (previousGameState != null &&
             previousGameState.seed == gameState.seed &&
             !needsDealAnimation &&
@@ -278,12 +292,18 @@ fun PyramidBoard(
     }
 
     val onSlotPositioned = remember {
-        { slotLocation: PyramidLocation.PyramidSlot, card: Card?, pos: Offset ->
+        { slotLocation: PyramidLocation.PyramidSlot, pos: Offset ->
             if (slotPositions[slotLocation] != pos) {
                 slotPositions[slotLocation] = pos
             }
-            if (card != null) {
-                cardOrigins[card.id] = pos
+            val expectedIdx = slotLocation.row * (slotLocation.row + 1) / 2 + slotLocation.col
+            val pyramidCard = latestBoardState.gameState.pyramid.getOrNull(expectedIdx)
+                ?.takeIf { it.row == slotLocation.row && it.col == slotLocation.col }
+                ?: latestBoardState.gameState.pyramid.firstOrNull {
+                    it.row == slotLocation.row && it.col == slotLocation.col
+                }
+            if (pyramidCard != null) {
+                cardOrigins[pyramidCard.card.id] = pos
             }
             if (!arePyramidSlotsReady && slotPositions.size >= 28) {
                 arePyramidSlotsReady = true
@@ -407,10 +427,16 @@ fun PyramidBoard(
         }
     }
 
-    LaunchedEffect(boardState.gameState.isWon, activeFlightsState.value.isEmpty()) {
-        if (boardState.gameState.isWon && activeFlightsState.value.isEmpty()) {
-            latestOnWinFlightsSettled()
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            latestBoardState.gameState.isWon && activeFlightsState.value.isEmpty()
         }
+            .distinctUntilChanged()
+            .collect { winSettled ->
+                if (winSettled) {
+                    latestOnWinFlightsSettled()
+                }
+            }
     }
 
     BoxWithConstraints(

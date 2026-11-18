@@ -6,6 +6,7 @@ import androidx.compose.animation.core.TargetBasedAnimation
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,7 +31,6 @@ import org.jetbrains.compose.resources.painterResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +46,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -125,21 +126,20 @@ fun PlayingCardView(
     val flipHolder = remember(card.id) { InPlaceFlipHolder(card.isFaceUp) }
     var isFlippingInPlace by remember(card.id) { mutableStateOf(false) }
 
-    val showFront: Boolean
-    val isMidFlip: Boolean
     val flipModifier: Modifier
+    val flipAngleProvider: (() -> Pair<Float, Boolean>)?
 
     if (externalFlip != null) {
-        showFront = remember(externalFlip) {
-            derivedStateOf { FastOutSlowInEasing.transform(externalFlip.value) > 0.5f }
-        }.value
-        isMidFlip = false
         flipModifier = Modifier.graphicsLayer {
             val angle = FastOutSlowInEasing.transform(externalFlip.value) * 180f
             if (angle in 0.5f..179.5f) {
                 rotationY = angle
                 cameraDistance = 12f * density
             }
+        }
+        flipAngleProvider = {
+            val angle = FastOutSlowInEasing.transform(externalFlip.value) * 180f
+            angle to (angle in 0.5f..179.5f)
         }
     } else if (flipOnAppear) {
         val appearAnim = remember(card.id) { Animatable(0f) }
@@ -149,12 +149,6 @@ fun PlayingCardView(
                 animationSpec = tween(durationMillis = 220, delayMillis = flipDelayMillis)
             )
         }
-        showFront = remember(card.id) {
-            derivedStateOf { appearAnim.value > 90f }
-        }.value
-        isMidFlip = remember(card.id) {
-            derivedStateOf { appearAnim.value in 0.5f..179.5f }
-        }.value
         flipModifier = Modifier.graphicsLayer {
             val angle = appearAnim.value
             if (angle in 0.5f..179.5f) {
@@ -162,10 +156,13 @@ fun PlayingCardView(
                 cameraDistance = 12f * density
             }
         }
+        flipAngleProvider = {
+            val angle = appearAnim.value
+            angle to (angle in 0.5f..179.5f)
+        }
     } else if (isElevated) {
-        showFront = card.isFaceUp
-        isMidFlip = false
         flipModifier = Modifier
+        flipAngleProvider = null
     } else {
         if (card.isFaceUp != flipHolder.lastFaceUp) {
             flipHolder.lastFaceUp = card.isFaceUp
@@ -199,19 +196,17 @@ fun PlayingCardView(
                 angleState.floatValue = targetAngle
                 isFlippingInPlace = false
             }
-            showFront = remember(card.id) {
-                derivedStateOf { angleState.floatValue > 90f }
-            }.value
-            isMidFlip = true
             flipModifier = Modifier.graphicsLayer {
                 rotationY = angleState.floatValue
                 cameraDistance = 12f * density
             }
+            flipAngleProvider = {
+                angleState.floatValue to true
+            }
         } else {
             flipHolder.currentAngle = if (card.isFaceUp) 180f else 0f
-            showFront = card.isFaceUp
-            isMidFlip = false
             flipModifier = Modifier
+            flipAngleProvider = null
         }
     }
 
@@ -253,15 +248,35 @@ fun PlayingCardView(
             .semantics { contentDescription = cardDescription }
             .then(clickableModifier)
     ) {
-        if (showFront) {
-            val frontModifier = if (isMidFlip) {
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { rotationY = 180f }
-            } else {
-                Modifier.fillMaxSize()
+        if (flipAngleProvider != null) {
+            val frontBitmap = imageResource(getCardDrawableRes(card))
+            val backBitmap = imageResource(getCardBackDrawableRes(cardBackTheme))
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val (angle, parentRotated) = flipAngleProvider()
+                val showFront = angle > 90f
+                val bitmapToDraw = if (showFront) frontBitmap else backBitmap
+                val w = size.width.roundToInt()
+                val h = size.height.roundToInt()
+                if (w > 0 && h > 0) {
+                    if (showFront && parentRotated) {
+                        withTransform({
+                            scale(scaleX = -1f, scaleY = 1f, pivot = center)
+                        }) {
+                            drawImage(
+                                image = bitmapToDraw,
+                                dstSize = IntSize(w, h)
+                            )
+                        }
+                    } else {
+                        drawImage(
+                            image = bitmapToDraw,
+                            dstSize = IntSize(w, h)
+                        )
+                    }
+                }
             }
-            CardFrontContent(card = card, modifier = frontModifier)
+        } else if (card.isFaceUp) {
+            CardFrontContent(card = card, modifier = Modifier.fillMaxSize())
         } else {
             CardBackContent(modifier = Modifier.fillMaxSize(), cardBackTheme = cardBackTheme)
         }
@@ -369,42 +384,3 @@ fun EmptyPileSlot(
         }
     }
 }
-/*
-
-@Preview(showBackground = true, backgroundColor = 0xFF145A32)
-@Composable
-private fun PlayingCardPreview() {
-    val colors = TableTheme.CLASSIC_GREEN.toColors()
-    Row(
-        modifier = Modifier.padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        PlayingCardView(
-            card = Card(Suit.HEARTS, Rank.QUEEN, isFaceUp = true),
-            cardWidth = 56.dp,
-            cardHeight = 80.dp,
-            colors = colors
-        )
-        PlayingCardView(
-            card = Card(Suit.SPADES, Rank.ACE, isFaceUp = true),
-            cardWidth = 56.dp,
-            cardHeight = 80.dp,
-            colors = colors,
-            isSelected = true
-        )
-        PlayingCardView(
-            card = Card(Suit.CLUBS, Rank.SEVEN, isFaceUp = false),
-            cardWidth = 56.dp,
-            cardHeight = 80.dp,
-            colors = colors
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        EmptyPileSlot(
-            cardWidth = 56.dp,
-            cardHeight = 80.dp,
-            colors = colors,
-            label = "A"
-        )
-    }
-}
-*/

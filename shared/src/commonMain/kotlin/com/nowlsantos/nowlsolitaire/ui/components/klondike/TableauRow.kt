@@ -30,7 +30,7 @@ internal fun TableauRow(
     textMeasurer: TextMeasurer,
     activeDragState: State<ActiveDragState?>,
     getFlyingHiddenState: (String) -> MutableState<Boolean>,
-    hoveredTarget: PileLocation?,
+    hoveredTargetState: State<PileLocation?>,
     onUpdateTargetBounds: (PileLocation, Rect) -> Unit,
     onRegisterCardOrigin: (String, Offset) -> Unit,
     onStartDrag: (PileLocation, Int, List<Card>, Offset?, Float) -> Unit,
@@ -48,7 +48,6 @@ internal fun TableauRow(
             val location = PileLocation.Tableau(columnIndex)
             val cards = boardState.gameState.tableau.getOrElse(columnIndex) { emptyList() }
             val isHintTarget = boardState.activeHint?.to == location
-            val isDropTarget = hoveredTarget == location
             val columnMountOffset = mountStartIndex
             mountStartIndex += cards.size
 
@@ -62,7 +61,7 @@ internal fun TableauRow(
                     selection = boardState.selection,
                     activeHint = boardState.activeHint,
                     isHintTarget = isHintTarget,
-                    isDropTarget = isDropTarget,
+                    hoveredTargetState = hoveredTargetState,
                     cardWidth = cardWidth,
                     cardHeight = cardHeight,
                     availableHeight = availableHeight,

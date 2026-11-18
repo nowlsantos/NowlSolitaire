@@ -39,7 +39,7 @@ internal fun TableauColumn(
     selection: CardSelection?,
     activeHint: HintMove?,
     isHintTarget: Boolean,
-    isDropTarget: Boolean,
+    hoveredTargetState: State<PileLocation?>,
     cardWidth: Dp,
     cardHeight: Dp,
     availableHeight: Dp,
@@ -55,6 +55,9 @@ internal fun TableauColumn(
     onCancelDrag: () -> Unit,
     onIntent: (KlondikeIntent) -> Unit
 ) {
+    val isDropTarget by remember(location) {
+        derivedStateOf { hoveredTargetState.value == location }
+    }
     val columnVisibleLimit by remember(mountStartIndex, cards.size) {
         derivedStateOf {
             val limit = dealMountLimitState.value

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -36,7 +37,7 @@ internal fun FoundationPile(
     textMeasurer: TextMeasurer,
     activeDragState: State<ActiveDragState?>,
     getFlyingHiddenState: (String) -> MutableState<Boolean>,
-    hoveredTarget: PileLocation?,
+    hoveredTargetState: State<PileLocation?>,
     onUpdateTargetBounds: (PileLocation, Rect) -> Unit,
     onRegisterCardOrigin: (String, Offset) -> Unit,
     onStartDrag: (PileLocation, Int, List<Card>, Offset?) -> Unit,
@@ -50,7 +51,9 @@ internal fun FoundationPile(
     val isSelected = boardState.selection?.location == location
     val isHintSource = boardState.activeHint?.from == location
     val isHintTarget = boardState.activeHint?.to == location
-    val isDropTarget = hoveredTarget == location
+    val isDropTarget by remember(location) {
+        derivedStateOf { hoveredTargetState.value == location }
+    }
     val bottomCardFlyingState = if (pile.size == 1) {
         getFlyingHiddenState(pile[0].id)
     } else {
@@ -111,18 +114,19 @@ internal fun FoundationPile(
                             val hiddenForDrag = isTopCard && activeDragState.value?.from == location
                             alpha = if (hiddenForDrag || flyingHiddenState.value) 0f else 1f
                         }
-                        .onGloballyPositioned { coords ->
-                            if (coords.isAttached) {
-                                val pos = coords.positionInRoot()
-                                originHolder.value = pos
-                                onRegisterCardOrigin(card.id, pos)
-                            } else {
-                                originHolder.value = null
-                            }
-                        }
                         .then(
                             if (isTopCard) {
-                                Modifier.pointerInput(card.id, location) {
+                                Modifier
+                                    .onGloballyPositioned { coords ->
+                                        if (coords.isAttached) {
+                                            val pos = coords.positionInRoot()
+                                            originHolder.value = pos
+                                            onRegisterCardOrigin(card.id, pos)
+                                        } else {
+                                            originHolder.value = null
+                                        }
+                                    }
+                                    .pointerInput(card.id, location) {
                                     detectDragGestures(
                                         onDragStart = {
                                             onStartDrag(

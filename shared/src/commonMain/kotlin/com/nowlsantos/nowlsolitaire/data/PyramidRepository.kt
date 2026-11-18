@@ -9,9 +9,13 @@ import com.nowlsantos.nowlsolitaire.domain.model.GameStats
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
 import com.nowlsantos.nowlsolitaire.domain.model.SavedPyramidGameSnapshot
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 interface PyramidRepository {
@@ -34,52 +38,80 @@ class DataStorePyramidRepository(
     private val json: Json
 ) : PyramidRepository {
 
-    override val settingsFlow: Flow<PyramidSettings> = dataStore.data.map { prefs ->
-        val raw = prefs[KEY_SETTINGS]
-        val settings = raw?.let {
-            runCatching { json.decodeFromString<PyramidSettings>(it) }.getOrNull()
-        } ?: PyramidSettings()
-        if (prefs[KEY_TIMER_MIGRATED] != true) {
-            settings.copy(showTimer = false)
-        } else {
-            settings
+    override val settingsFlow: Flow<PyramidSettings> = dataStore.data
+        .map { prefs -> prefs[KEY_SETTINGS] to (prefs[KEY_TIMER_MIGRATED] == true) }
+        .distinctUntilChanged()
+        .map { (raw, migrated) ->
+            val settings = raw?.let {
+                runCatching { json.decodeFromString<PyramidSettings>(it) }.getOrNull()
+            } ?: PyramidSettings()
+            if (!migrated) {
+                settings.copy(showTimer = false)
+            } else {
+                settings
+            }
         }
-    }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
 
-    override val statsFlow: Flow<GameStats> = dataStore.data.map { prefs ->
-        prefs[KEY_STATS]?.let { raw ->
-            runCatching { json.decodeFromString<GameStats>(raw) }.getOrNull()
-        } ?: GameStats()
-    }
+    override val statsFlow: Flow<GameStats> = dataStore.data
+        .map { prefs -> prefs[KEY_STATS] }
+        .distinctUntilChanged()
+        .map { raw ->
+            raw?.let {
+                runCatching { json.decodeFromString<GameStats>(it) }.getOrNull()
+            } ?: GameStats()
+        }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
 
-    override val runSessionFlow: Flow<PyramidRunSession> = dataStore.data.map { prefs ->
-        prefs[KEY_RUN_SESSION]?.let { raw ->
-            runCatching { json.decodeFromString<PyramidRunSession>(raw) }.getOrNull()
-        } ?: PyramidRunSession()
-    }
+    override val runSessionFlow: Flow<PyramidRunSession> = dataStore.data
+        .map { prefs -> prefs[KEY_RUN_SESSION] }
+        .distinctUntilChanged()
+        .map { raw ->
+            raw?.let {
+                runCatching { json.decodeFromString<PyramidRunSession>(it) }.getOrNull()
+            } ?: PyramidRunSession()
+        }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
 
     override suspend fun loadRunSession(): PyramidRunSession {
         val raw = dataStore.data.first()[KEY_RUN_SESSION] ?: return PyramidRunSession()
-        return runCatching { json.decodeFromString<PyramidRunSession>(raw) }.getOrNull() ?: PyramidRunSession()
+        return withContext(Dispatchers.Default) {
+            runCatching { json.decodeFromString<PyramidRunSession>(raw) }.getOrNull() ?: PyramidRunSession()
+        }
     }
 
     override suspend fun saveRunSession(session: PyramidRunSession) {
+        val encoded = withContext(Dispatchers.Default) {
+            json.encodeToString(session)
+        }
         dataStore.edit { prefs ->
-            prefs[KEY_RUN_SESSION] = json.encodeToString(session)
+            prefs[KEY_RUN_SESSION] = encoded
         }
     }
 
     override suspend fun loadSavedGame(): SavedPyramidGameSnapshot? {
         val raw = dataStore.data.first()[KEY_SAVED_GAME] ?: return null
-        return runCatching { json.decodeFromString<SavedPyramidGameSnapshot>(raw) }.getOrNull()
+        return withContext(Dispatchers.Default) {
+            runCatching { json.decodeFromString<SavedPyramidGameSnapshot>(raw) }.getOrNull()
+        }
     }
 
     override suspend fun saveGame(snapshot: SavedPyramidGameSnapshot?) {
+        val encoded = if (snapshot == null) {
+            null
+        } else {
+            withContext(Dispatchers.Default) {
+                json.encodeToString(snapshot)
+            }
+        }
         dataStore.edit { prefs ->
-            if (snapshot == null) {
+            if (encoded == null) {
                 prefs.remove(KEY_SAVED_GAME)
             } else {
-                prefs[KEY_SAVED_GAME] = json.encodeToString(snapshot)
+                prefs[KEY_SAVED_GAME] = encoded
             }
         }
     }

@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidRules
-import com.nowlsantos.nowlsolitaire.domain.model.Card
 import com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
@@ -45,7 +44,7 @@ internal fun PyramidGrid(
     isDealingState: State<Boolean>,
     hideAllForPendingDealState: State<Boolean>,
     getFlyingHiddenState: (String) -> State<Boolean>,
-    onSlotPositioned: (PyramidLocation.PyramidSlot, Card?, Offset) -> Unit,
+    onSlotPositioned: (PyramidLocation.PyramidSlot, Offset) -> Unit,
     onTapCard: (PyramidLocation) -> Unit
 ) {
     Box(
@@ -77,7 +76,7 @@ internal fun PyramidGrid(
                         Box(
                             modifier = Modifier.onGloballyPositioned { coords ->
                                 if (coords.isAttached) {
-                                    onSlotPositioned(slotLocation, pyramidCard?.card, coords.positionInRoot())
+                                    onSlotPositioned(slotLocation, coords.positionInRoot())
                                 }
                             }
                         ) {

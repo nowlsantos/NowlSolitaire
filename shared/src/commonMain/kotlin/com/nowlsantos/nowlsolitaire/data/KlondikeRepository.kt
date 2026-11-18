@@ -8,9 +8,13 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nowlsantos.nowlsolitaire.domain.model.GameSettings
 import com.nowlsantos.nowlsolitaire.domain.model.GameStats
 import com.nowlsantos.nowlsolitaire.domain.model.SavedGameSnapshot
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 interface KlondikeRepository {
@@ -30,35 +34,53 @@ class DataStoreKlondikeRepository(
     private val json: Json
 ) : KlondikeRepository {
 
-    override val settingsFlow: Flow<GameSettings> = dataStore.data.map { prefs ->
-        val raw = prefs[KEY_SETTINGS]
-        val settings = raw?.let {
-            runCatching { json.decodeFromString<GameSettings>(it) }.getOrNull()
-        } ?: GameSettings()
-        if (prefs[KEY_TIMER_MIGRATED] != true) {
-            settings.copy(showTimer = false)
-        } else {
-            settings
+    override val settingsFlow: Flow<GameSettings> = dataStore.data
+        .map { prefs -> prefs[KEY_SETTINGS] to (prefs[KEY_TIMER_MIGRATED] == true) }
+        .distinctUntilChanged()
+        .map { (raw, migrated) ->
+            val settings = raw?.let {
+                runCatching { json.decodeFromString<GameSettings>(it) }.getOrNull()
+            } ?: GameSettings()
+            if (!migrated) {
+                settings.copy(showTimer = false)
+            } else {
+                settings
+            }
         }
-    }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
 
-    override val statsFlow: Flow<GameStats> = dataStore.data.map { prefs ->
-        prefs[KEY_STATS]?.let { raw ->
-            runCatching { json.decodeFromString<GameStats>(raw) }.getOrNull()
-        } ?: GameStats()
-    }
+    override val statsFlow: Flow<GameStats> = dataStore.data
+        .map { prefs -> prefs[KEY_STATS] }
+        .distinctUntilChanged()
+        .map { raw ->
+            raw?.let {
+                runCatching { json.decodeFromString<GameStats>(it) }.getOrNull()
+            } ?: GameStats()
+        }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
 
     override suspend fun loadSavedGame(): SavedGameSnapshot? {
         val raw = dataStore.data.first()[KEY_SAVED_GAME] ?: return null
-        return runCatching { json.decodeFromString<SavedGameSnapshot>(raw) }.getOrNull()
+        return withContext(Dispatchers.Default) {
+            runCatching { json.decodeFromString<SavedGameSnapshot>(raw) }.getOrNull()
+        }
     }
 
     override suspend fun saveGame(snapshot: SavedGameSnapshot?) {
+        val encoded = if (snapshot == null) {
+            null
+        } else {
+            withContext(Dispatchers.Default) {
+                json.encodeToString(snapshot)
+            }
+        }
         dataStore.edit { prefs ->
-            if (snapshot == null) {
+            if (encoded == null) {
                 prefs.remove(KEY_SAVED_GAME)
             } else {
-                prefs[KEY_SAVED_GAME] = json.encodeToString(snapshot)
+                prefs[KEY_SAVED_GAME] = encoded
             }
         }
     }

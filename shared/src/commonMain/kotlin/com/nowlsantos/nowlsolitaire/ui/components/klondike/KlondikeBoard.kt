@@ -23,7 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -47,6 +47,8 @@ import com.nowlsantos.nowlsolitaire.ui.components.LocalCardBackTheme
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeIntent
 import com.nowlsantos.nowlsolitaire.ui.theme.toColors
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -72,6 +74,7 @@ fun KlondikeBoard(
     val isReturningHolder = remember { BooleanHolder() }
     val returnJobHolder = remember { JobHolder() }
     val prevGameStateHolder = remember { GameStateHolder(null) }
+    val lastDealtIdHolder = remember { LongHolder(-1L) }
     val dealBatchHolder = remember { IntHolder(0) }
     val lastDragDropHolder = remember { DragDropHolder() }
     val cardFlyingHiddenMap = remember { HashMap<String, MutableState<Boolean>>(64) }
@@ -80,22 +83,27 @@ fun KlondikeBoard(
     val dragOffsetState = remember { mutableStateOf(Offset.Zero) }
     val returnProgressState = remember { mutableFloatStateOf(0f) }
     val activeFlightsState = remember { mutableStateOf<List<CardFlight>>(emptyList()) }
+    val isReturningState = remember { mutableStateOf(false) }
     val dealMountLimitState = remember { mutableIntStateOf(Int.MAX_VALUE) }
     val dealBatchState = remember { mutableIntStateOf(0) }
-    var hoveredTarget by remember { mutableStateOf<PileLocation?>(null) }
+    val hoveredTargetState = remember { mutableStateOf<PileLocation?>(null) }
 
     val latestBoardState by rememberUpdatedState(boardState)
     val latestOnIntent by rememberUpdatedState(onIntent)
     val latestOnWinFlightsSettled by rememberUpdatedState(onWinFlightsSettled)
     val latestOnBoardSettledChanged by rememberUpdatedState(onBoardSettledChanged)
 
-    val isBoardSettled = activeFlightsState.value.isEmpty() &&
-        activeDragState.value == null &&
-        !isReturningHolder.value &&
-        !boardState.isAutoCompleting
-
-    LaunchedEffect(isBoardSettled) {
-        latestOnBoardSettledChanged(isBoardSettled)
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            activeFlightsState.value.isEmpty() &&
+                activeDragState.value == null &&
+                !isReturningState.value &&
+                !latestBoardState.isAutoCompleting
+        }
+            .distinctUntilChanged()
+            .collect { settled ->
+                latestOnBoardSettledChanged(settled)
+            }
     }
 
     val getFlyingHiddenState = remember {
@@ -158,8 +166,8 @@ fun KlondikeBoard(
                 }
             }
         }
-        if (hoveredTarget != bestTarget) {
-            hoveredTarget = bestTarget
+        if (hoveredTargetState.value != bestTarget) {
+            hoveredTargetState.value = bestTarget
         }
     }
 
@@ -178,6 +186,7 @@ fun KlondikeBoard(
                 returnJobHolder.value?.cancel()
                 returnJobHolder.value = null
                 isReturningHolder.value = false
+                isReturningState.value = false
                 returnProgressState.floatValue = 0f
                 activeDragState.value = null
                 dragOffsetState.value = Offset.Zero
@@ -197,6 +206,7 @@ fun KlondikeBoard(
         dragOffsetState.value = Offset.Zero
         returnProgressState.floatValue = 0f
         isReturningHolder.value = false
+        isReturningState.value = false
         activeDragState.value = ActiveDragState(
             from = from,
             cardIndex = cardIndex,
@@ -206,7 +216,7 @@ fun KlondikeBoard(
             cardHeightPx = cardHeightPx,
             stackStepPx = stackStepPx
         )
-        hoveredTarget = null
+        hoveredTargetState.value = null
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
@@ -225,7 +235,7 @@ fun KlondikeBoard(
         {
             val drag = activeDragState.value
             if (drag != null && !isReturningHolder.value && returnJobHolder.value?.isActive != true) {
-                val target = hoveredTarget
+                val target = hoveredTargetState.value
                 if (target != null && KlondikeRules.isValidMove(latestBoardState.gameState, drag.from, drag.cardIndex, target)) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     lastDragDropHolder.value = DragDropSnapshot(
@@ -234,24 +244,27 @@ fun KlondikeBoard(
                         stackStepPx = drag.stackStepPx
                     )
                     activeDragState.value = null
-                    hoveredTarget = null
+                    hoveredTargetState.value = null
                     dragOffsetState.value = Offset.Zero
                     returnProgressState.floatValue = 0f
                     isReturningHolder.value = false
+                    isReturningState.value = false
                     latestOnIntent(KlondikeIntent.MoveCards(drag.from, drag.cardIndex, target))
                 } else {
                     val releaseDelta = dragOffsetState.value
-                    hoveredTarget = null
+                    hoveredTargetState.value = null
                     val distance = releaseDelta.getDistance()
                     val tapThresholdPx = with(density) { 22.dp.toPx() }
                     if (distance < tapThresholdPx) {
                         isReturningHolder.value = false
+                        isReturningState.value = false
                         returnProgressState.floatValue = 0f
                         dragOffsetState.value = Offset.Zero
                         activeDragState.value = null
                         latestOnIntent(KlondikeIntent.TapPileOrCard(drag.from, drag.cardIndex))
                     } else {
                         isReturningHolder.value = true
+                        isReturningState.value = true
                         returnJobHolder.value?.cancel()
                         returnJobHolder.value = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                             val anim = TargetBasedAnimation(
@@ -281,6 +294,7 @@ fun KlondikeBoard(
                             }
                             if (isActive) {
                                 isReturningHolder.value = false
+                                isReturningState.value = false
                                 returnProgressState.floatValue = 0f
                                 dragOffsetState.value = Offset.Zero
                                 activeDragState.value = null
@@ -298,9 +312,10 @@ fun KlondikeBoard(
             returnJobHolder.value?.cancel()
             returnJobHolder.value = null
             isReturningHolder.value = false
+            isReturningState.value = false
             returnProgressState.floatValue = 0f
             activeDragState.value = null
-            hoveredTarget = null
+            hoveredTargetState.value = null
             dragOffsetState.value = Offset.Zero
         }
     }
@@ -354,10 +369,16 @@ fun KlondikeBoard(
         }
     }
 
-    LaunchedEffect(boardState.isWon, boardState.isAutoCompleting, activeFlightsState.value.isEmpty()) {
-        if (boardState.isWon && !boardState.isAutoCompleting && activeFlightsState.value.isEmpty()) {
-            latestOnWinFlightsSettled()
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            latestBoardState.isWon && !latestBoardState.isAutoCompleting && activeFlightsState.value.isEmpty()
         }
+            .distinctUntilChanged()
+            .collect { winSettled ->
+                if (winSettled) {
+                    latestOnWinFlightsSettled()
+                }
+            }
     }
 
     val onBoardIntent = remember(haptic) {
@@ -415,6 +436,7 @@ fun KlondikeBoard(
         val defaultFaceUpStepPx = with(density) { (cardHeight * 0.32f).coerceAtLeast(10.dp).toPx() }
 
         val previousState = prevGameStateHolder.value
+        val currentDealId = boardState.dealId
         if (previousState !== boardState.gameState) {
             prevGameStateHolder.value = boardState.gameState
             val currentDragDrop = lastDragDropHolder.value
@@ -424,10 +446,10 @@ fun KlondikeBoard(
                 currentState.waste.isEmpty() &&
                 currentState.foundations.all { it.isEmpty() }
             val isFreshDeal = isCleanDealState && (
-                previousState == null ||
-                    currentState.seed != previousState.seed ||
-                    previousState.moveCount != 1
+                (currentDealId > 0L && currentDealId != lastDealtIdHolder.value) ||
+                    (currentDealId <= 0L && previousState == null)
                 )
+            lastDealtIdHolder.value = currentDealId
             if (isFreshDeal) {
                 val dealBatchId = ++dealBatchHolder.value
                 val totalDealCards = currentState.tableau.sumOf { it.size }
@@ -481,21 +503,23 @@ fun KlondikeBoard(
             }
         }
 
-        val currentDealBatch = dealBatchState.intValue
-        LaunchedEffect(currentDealBatch) {
-            if (currentDealBatch > 0 && dealMountLimitState.intValue < Int.MAX_VALUE) {
-                // Skip the first frame so dialog dismissal & previous board teardown settle cleanly.
-                withFrameNanos {}
-                var mounted = 0
-                val totalToMount = boardState.gameState.tableau.sumOf { it.size }
-                while (mounted < totalToMount) {
-                    withFrameNanos {
-                        mounted += 7
-                        dealMountLimitState.intValue = if (mounted >= totalToMount) Int.MAX_VALUE else mounted
+        LaunchedEffect(Unit) {
+            snapshotFlow { dealBatchState.intValue }
+                .collectLatest { currentDealBatch ->
+                    if (currentDealBatch > 0 && dealMountLimitState.intValue < Int.MAX_VALUE) {
+                        // Skip the first frame so dialog dismissal & previous board teardown settle cleanly.
+                        withFrameNanos {}
+                        var mounted = 0
+                        val totalToMount = latestBoardState.gameState.tableau.sumOf { it.size }
+                        while (mounted < totalToMount) {
+                            withFrameNanos {
+                                mounted += 7
+                                dealMountLimitState.intValue = if (mounted >= totalToMount) Int.MAX_VALUE else mounted
+                            }
+                        }
+                        dealMountLimitState.intValue = Int.MAX_VALUE
                     }
                 }
-                dealMountLimitState.intValue = Int.MAX_VALUE
-            }
         }
 
         val onStartTopDrag = remember(cardWidthPx, cardHeightPx, defaultFaceUpStepPx) {
@@ -526,7 +550,7 @@ fun KlondikeBoard(
                     textMeasurer = sharedTextMeasurer,
                     activeDragState = activeDragState,
                     getFlyingHiddenState = getFlyingHiddenState,
-                    hoveredTarget = hoveredTarget,
+                    hoveredTargetState = hoveredTargetState,
                     onUpdateTargetBounds = onUpdateTargetBounds,
                     onRegisterStockOrigin = onRegisterStockOrigin,
                     onRegisterCardOrigin = onRegisterCardOrigin,
@@ -550,7 +574,7 @@ fun KlondikeBoard(
                     textMeasurer = sharedTextMeasurer,
                     activeDragState = activeDragState,
                     getFlyingHiddenState = getFlyingHiddenState,
-                    hoveredTarget = hoveredTarget,
+                    hoveredTargetState = hoveredTargetState,
                     onUpdateTargetBounds = onUpdateTargetBounds,
                     onRegisterCardOrigin = onRegisterCardOrigin,
                     onStartDrag = onStartTableauDrag,

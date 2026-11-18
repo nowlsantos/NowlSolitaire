@@ -12,6 +12,9 @@ import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
 import com.nowlsantos.nowlsolitaire.domain.model.SavedPyramidGameSnapshot
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class PyramidViewModel(
@@ -28,6 +33,8 @@ class PyramidViewModel(
     private val engine: PyramidEngine,
     private val rules: PyramidRules
 ) : ViewModel() {
+
+    internal var defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
 
     private val _uiState = MutableStateFlow(PyramidUiState())
     val uiState: StateFlow<PyramidUiState> = _uiState.asStateFlow()
@@ -38,8 +45,11 @@ class PyramidViewModel(
     private var recordedAsPlayed = false
     private var recordedAsWon = false
     private var isTimerPaused = false
+    private var internalElapsedSeconds = 0
     private var nextDealId = 1L
 
+    private var deadlockJob: Job? = null
+    private var persistDebounceJob: Job? = null
     private val persistChannel = Channel<SavedPyramidGameSnapshot?>(Channel.CONFLATED)
 
     init {
@@ -72,14 +82,19 @@ class PyramidViewModel(
             is PyramidIntent.SetTimerPaused -> {
                 isTimerPaused = intent.paused
                 if (intent.paused && hasStartedMoving && !_uiState.value.isWon) {
-                    persistCurrentGame()
+                    persistCurrentGame(immediate = true)
                 }
             }
             is PyramidIntent.UpdateTableTheme -> updateSettings { it.copy(tableTheme = intent.theme) }
             is PyramidIntent.UpdateCardBackTheme -> updateSettings { it.copy(cardBackTheme = intent.cardBackTheme) }
             is PyramidIntent.UpdateMaxRecycles -> updateMaxRecycles(intent.maxRecycles)
             is PyramidIntent.UpdateDealMode -> updateDealMode(intent.dealMode)
-            is PyramidIntent.UpdateShowTimer -> updateSettings { it.copy(showTimer = intent.enabled) }
+            is PyramidIntent.UpdateShowTimer -> {
+                if (intent.enabled) {
+                    _uiState.update { it.copy(elapsedSeconds = internalElapsedSeconds) }
+                }
+                updateSettings { it.copy(showTimer = intent.enabled) }
+            }
             is PyramidIntent.UpdateLeftHanded -> updateSettings { it.copy(leftHanded = intent.leftHanded) }
             PyramidIntent.ResetStats -> viewModelScope.launch { repository.resetStats() }
         }
@@ -130,7 +145,11 @@ class PyramidViewModel(
                 hasStartedMoving = saved.hasStartedMoving
                 recordedAsPlayed = saved.recordedAsPlayed
                 recordedAsWon = saved.gameState.isWon
-                val isDeadlocked = hasStartedMoving && !rules.hasAnyMovesLeft(session.currentState)
+                internalElapsedSeconds = saved.elapsedSeconds
+                val currentSnapshot = session.currentState
+                val isDeadlocked = hasStartedMoving && withContext(defaultDispatcher) {
+                    !rules.hasAnyMovesLeft(currentSnapshot)
+                }
                 val isOngoing = saved.hasStartedMoving || saved.gameState.moveCount > 0
                 val dealId = if (isOngoing) 0L else nextDealId++
                 _uiState.update {
@@ -138,7 +157,7 @@ class PyramidViewModel(
                         isLoading = false,
                         gameState = session.currentState,
                         canUndo = session.canUndo,
-                        elapsedSeconds = saved.elapsedSeconds,
+                        elapsedSeconds = internalElapsedSeconds,
                         settings = settings,
                         runSession = runSession,
                         showNoMovesDialog = isDeadlocked,
@@ -152,6 +171,7 @@ class PyramidViewModel(
     }
 
     private fun startFreshDeal(settings: PyramidSettings) {
+        deadlockJob?.cancel()
         val dealId = nextDealId++
         val effectiveRecycles = PyramidRunSession.getEffectiveMaxRecycles(runSession.currentRound, settings.maxRecycles)
         session = PyramidSession.newGame(
@@ -161,6 +181,7 @@ class PyramidViewModel(
         hasStartedMoving = false
         recordedAsPlayed = false
         recordedAsWon = false
+        internalElapsedSeconds = 0
         _uiState.update {
             it.copy(
                 isLoading = false,
@@ -178,7 +199,7 @@ class PyramidViewModel(
                 dealId = dealId
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = true)
     }
 
     private fun startNewGame() {
@@ -186,11 +207,13 @@ class PyramidViewModel(
     }
 
     private fun replayCurrentDeal() {
+        deadlockJob?.cancel()
         val dealId = nextDealId++
         session = PyramidSession.replayDeal(session.currentState)
         hasStartedMoving = false
         recordedAsPlayed = false
         recordedAsWon = false
+        internalElapsedSeconds = 0
         _uiState.update {
             it.copy(
                 gameState = session.currentState,
@@ -206,7 +229,7 @@ class PyramidViewModel(
                 dealId = dealId
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = true)
     }
 
     private fun nextRound() {
@@ -266,10 +289,7 @@ class PyramidViewModel(
         val oldState = session.currentState
         val updated = session.drawOrRecycle()
         if (updated === session) {
-            val isDeadlocked = !oldState.isWon && !rules.hasAnyMovesLeft(oldState)
-            if (isDeadlocked) {
-                _uiState.update { it.copy(showNoMovesDialog = true) }
-            }
+            scheduleDeadlockCheck()
             return
         }
 
@@ -280,19 +300,21 @@ class PyramidViewModel(
         } else {
             null
         }
-        val isDeadlocked = !session.currentState.isWon && !rules.hasAnyMovesLeft(session.currentState)
         _uiState.update {
             it.copy(
                 gameState = session.currentState,
                 canUndo = session.canUndo,
-                showNoMovesDialog = isDeadlocked,
-                activeDrawCard = drawnCard
+                showNoMovesDialog = false,
+                activeDrawCard = drawnCard,
+                activeMatch = null
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = false)
+        scheduleDeadlockCheck()
     }
 
     private fun handleTapCard(location: PyramidLocation) {
+        if (_uiState.value.isWon) return
         clearHint()
 
         val (newSession, result) = session.interactCard(location)
@@ -302,6 +324,7 @@ class PyramidViewModel(
             is PyramidInteractionResult.Matched -> {
                 ensureGameStarted()
                 val isWon = result.isVictory
+                val elapsed = internalElapsedSeconds
                 if (isWon && !recordedAsWon) {
                     recordedAsWon = true
                     val roundScore = session.currentState.score
@@ -330,23 +353,27 @@ class PyramidViewModel(
                         repository.saveRunSession(runSession)
                         repository.recordGameWon(
                             score = roundScore,
-                            elapsedSeconds = _uiState.value.elapsedSeconds
+                            elapsedSeconds = elapsed
                         )
                     }
                 }
 
-                val isDeadlocked = !isWon && !rules.hasAnyMovesLeft(session.currentState)
                 _uiState.update {
                     it.copy(
                         gameState = session.currentState,
                         canUndo = session.canUndo,
-                        showNoMovesDialog = isDeadlocked,
+                        elapsedSeconds = if (isWon) elapsed else it.elapsedSeconds,
+                        showNoMovesDialog = false,
                         runSession = runSession,
                         lastMatchedResult = "+${result.pointsEarned} pts",
-                        activeMatch = result.match
+                        activeMatch = result.match,
+                        activeDrawCard = null
                     )
                 }
-                persistCurrentGame()
+                persistCurrentGame(immediate = isWon)
+                if (!isWon) {
+                    scheduleDeadlockCheck()
+                }
             }
             is PyramidInteractionResult.Selected,
             is PyramidInteractionResult.Deselected,
@@ -364,55 +391,67 @@ class PyramidViewModel(
 
     private fun undoMove() {
         if (!session.canUndo) return
+        deadlockJob?.cancel()
         clearHint()
 
         session = session.undo()
-        val isDeadlocked = !session.currentState.isWon && !rules.hasAnyMovesLeft(session.currentState)
 
         _uiState.update {
             it.copy(
                 gameState = session.currentState,
                 canUndo = session.canUndo,
-                showNoMovesDialog = isDeadlocked,
+                showNoMovesDialog = false,
                 activeMatch = null,
                 activeDrawCard = null
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = false)
+        scheduleDeadlockCheck()
     }
 
     private fun requestHint() {
         if (_uiState.value.isWon) return
-        val state = session.currentState
-        val hint = session.findHint()
-        if (hint != null) {
-            _uiState.update {
-                it.copy(
-                    activeHint = hint,
-                    showNoMovesDialog = false,
-                    hintMessage = "Match found!"
-                )
+        val snapshot = session.currentState
+        viewModelScope.launch {
+            val hint = withContext(defaultDispatcher) {
+                rules.findBestHint(snapshot)
             }
-        } else if (rules.hasAnyMovesLeft(state)) {
-            val message = if (state.stock.isNotEmpty()) {
-                "No open matches. Draw from the stock."
+            if (!isActive || session.currentState !== snapshot || snapshot.isWon) return@launch
+            if (hint != null) {
+                _uiState.update {
+                    it.copy(
+                        activeHint = hint,
+                        showNoMovesDialog = false,
+                        hintMessage = "Match found!"
+                    )
+                }
+                return@launch
+            }
+            val hasMoves = withContext(defaultDispatcher) {
+                rules.hasAnyMovesLeft(snapshot)
+            }
+            if (!isActive || session.currentState !== snapshot || snapshot.isWon) return@launch
+            if (hasMoves) {
+                val message = if (snapshot.stock.isNotEmpty()) {
+                    "No open matches. Draw from the stock."
+                } else {
+                    "No open matches. Recycle the waste pile."
+                }
+                _uiState.update {
+                    it.copy(
+                        activeHint = null,
+                        showNoMovesDialog = false,
+                        hintMessage = message
+                    )
+                }
             } else {
-                "No open matches. Recycle the waste pile."
-            }
-            _uiState.update {
-                it.copy(
-                    activeHint = null,
-                    showNoMovesDialog = false,
-                    hintMessage = message
-                )
-            }
-        } else {
-            _uiState.update {
-                it.copy(
-                    activeHint = null,
-                    hintMessage = null,
-                    showNoMovesDialog = true
-                )
+                _uiState.update {
+                    it.copy(
+                        activeHint = null,
+                        hintMessage = null,
+                        showNoMovesDialog = true
+                    )
+                }
             }
         }
     }
@@ -422,14 +461,16 @@ class PyramidViewModel(
             repository.updateSettings { it.copy(maxRecycles = maxRecycles) }
             val updatedState = session.currentState.copy(maxRecycles = maxRecycles)
             session = session.copy(currentState = updatedState)
-            val isDeadlocked = hasStartedMoving && !updatedState.isWon && !rules.hasAnyMovesLeft(updatedState)
             _uiState.update {
                 it.copy(
                     gameState = updatedState,
-                    showNoMovesDialog = isDeadlocked
+                    showNoMovesDialog = false
                 )
             }
-            persistCurrentGame()
+            persistCurrentGame(immediate = true)
+            if (hasStartedMoving && !updatedState.isWon) {
+                scheduleDeadlockCheck()
+            }
         }
     }
 
@@ -471,30 +512,68 @@ class PyramidViewModel(
         }
     }
 
-    private fun persistCurrentGame() {
-        if (session.currentState.isWon) {
-            persistChannel.trySend(null)
-            return
+    private fun scheduleDeadlockCheck() {
+        deadlockJob?.cancel()
+        val snapshot = session.currentState
+        if (snapshot.isWon) return
+        deadlockJob = viewModelScope.launch {
+            val hasMoves = withContext(defaultDispatcher) {
+                rules.hasAnyMovesLeft(snapshot)
+            }
+            if (!hasMoves && isActive && session.currentState === snapshot && !snapshot.isWon) {
+                _uiState.update { it.copy(showNoMovesDialog = true) }
+            }
         }
-        val snapshot = SavedPyramidGameSnapshot(
+    }
+
+    private fun buildSnapshot(): SavedPyramidGameSnapshot? {
+        if (session.currentState.isWon) return null
+        return SavedPyramidGameSnapshot(
             gameState = session.currentState,
             undoStack = session.undoStack,
-            elapsedSeconds = _uiState.value.elapsedSeconds,
+            elapsedSeconds = internalElapsedSeconds,
             hasStartedMoving = hasStartedMoving,
             recordedAsPlayed = recordedAsPlayed,
             runSession = runSession
         )
-        persistChannel.trySend(snapshot)
+    }
+
+    private fun persistCurrentGame(immediate: Boolean = false) {
+        if (session.currentState.isWon) {
+            persistDebounceJob?.cancel()
+            persistChannel.trySend(null)
+            return
+        }
+        if (immediate) {
+            persistDebounceJob?.cancel()
+            persistChannel.trySend(buildSnapshot())
+        } else {
+            persistDebounceJob?.cancel()
+            persistDebounceJob = viewModelScope.launch {
+                delay(350.milliseconds)
+                persistChannel.trySend(buildSnapshot())
+            }
+        }
     }
 
     private fun startTimerLoop() {
         viewModelScope.launch {
             while (isActive) {
                 delay(1.seconds)
-                if (!isTimerPaused && hasStartedMoving && !_uiState.value.isWon && !_uiState.value.isLoading) {
-                    _uiState.update { it.copy(elapsedSeconds = it.elapsedSeconds + 1) }
+                val state = _uiState.value
+                if (!isTimerPaused && hasStartedMoving && !state.isWon && !state.isLoading) {
+                    internalElapsedSeconds += 1
+                    if (state.settings.showTimer) {
+                        _uiState.update { it.copy(elapsedSeconds = internalElapsedSeconds) }
+                    }
                 }
             }
         }
+    }
+
+    override fun onCleared() {
+        deadlockJob?.cancel()
+        persistDebounceJob?.cancel()
+        persistChannel.close()
     }
 }

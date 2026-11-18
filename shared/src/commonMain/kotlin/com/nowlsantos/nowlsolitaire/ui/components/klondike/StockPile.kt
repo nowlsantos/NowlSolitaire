@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,17 +77,15 @@ internal fun StockPile(
                 onClick = if (canRecycle) { { onIntent(KlondikeIntent.DrawOrRecycle) } } else null
             )
         } else {
-            key(topStock.id) {
-                PlayingCardView(
-                    card = topStock,
-                    cardWidth = cardWidth,
-                    cardHeight = cardHeight,
-                    colors = colors,
-                    isHinted = isHinted,
-                    textMeasurer = textMeasurer,
-                    onClick = { onIntent(KlondikeIntent.DrawOrRecycle) }
-                )
-            }
+            PlayingCardView(
+                card = topStock,
+                cardWidth = cardWidth,
+                cardHeight = cardHeight,
+                colors = colors,
+                isHinted = isHinted,
+                textMeasurer = textMeasurer,
+                onClick = { onIntent(KlondikeIntent.DrawOrRecycle) }
+            )
             /*Surface(
                 color = Color(0xAA000000),
                 shape = RoundedCornerShape(8.dp),

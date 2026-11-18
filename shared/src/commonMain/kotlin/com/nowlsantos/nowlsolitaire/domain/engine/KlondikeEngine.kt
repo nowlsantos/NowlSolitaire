@@ -148,7 +148,13 @@ object KlondikeEngine {
         return moveCards(state, bestCandidate.first, bestCandidate.second, bestCandidate.third)
     }
 
-    fun findHint(state: GameState, drawCount: Int = state.drawMode.drawCount): HintMove? {
+    fun findHint(
+        state: GameState,
+        drawCount: Int = state.drawMode.drawCount,
+        isCancelled: () -> Boolean = { false }
+    ): HintMove? {
+        if (isCancelled()) return null
+
         // 1. Top Tableau cards -> Foundation
         for (col in 0 until GameState.TABLEAU_COUNT) {
             val column = state.tableau[col]
@@ -207,8 +213,10 @@ object KlondikeEngine {
             return HintMove(PileLocation.Stock, 0, PileLocation.Waste)
         }
 
+        if (isCancelled()) return null
+
         // 5. Multi-step Tableau reorganizations and Foundation -> Tableau pull-downs that unlock progress
-        val sequenceMove = findProgressiveSequenceFirstMove(state, drawCount)
+        val sequenceMove = findProgressiveSequenceFirstMove(state, drawCount, isCancelled)
         if (sequenceMove != null) {
             return sequenceMove
         }
@@ -221,19 +229,37 @@ object KlondikeEngine {
         return null
     }
 
-    fun hasAvailableMoves(state: GameState, drawCount: Int = state.drawMode.drawCount): Boolean {
+    fun hasAvailableMoves(
+        state: GameState,
+        drawCount: Int = state.drawMode.drawCount,
+        isCancelled: () -> Boolean = { false }
+    ): Boolean {
         if (state.isWon) return false
         if (state.isAutoCompleteReady) return true
         if (state.stock.isNotEmpty()) return true
         if (state.canRecycleStock && canStockProduceMove(state, drawCount)) return true
-        return findHint(state, drawCount) != null
+        return findHint(state, drawCount, isCancelled) != null
     }
 
     fun canStockProduceMove(state: GameState, drawCount: Int = state.drawMode.drawCount): Boolean {
-        val topWaste = state.waste.lastOrNull()
-        if (topWaste != null && isCardPlayable(state, topWaste)) return true
+        val reachableCards = collectReachableStockCards(state, drawCount)
+        for (i in reachableCards.indices) {
+            if (isCardPlayable(state, reachableCards[i])) return true
+        }
+        return false
+    }
 
-        if (state.stock.isEmpty() && !state.canRecycleStock) return false
+    private fun collectReachableStockCards(state: GameState, drawCount: Int): List<Card> {
+        val result = mutableListOf<Card>()
+        val seenCards = HashSet<Card>()
+        state.waste.lastOrNull()?.let { topWaste ->
+            val playable = if (topWaste.isFaceUp) topWaste else topWaste.copy(isFaceUp = true)
+            if (seenCards.add(playable)) {
+                result.add(playable)
+            }
+        }
+
+        if (state.stock.isEmpty() && !state.canRecycleStock) return result
 
         var sim = if (state.drawMode.drawCount == drawCount) {
             state
@@ -242,17 +268,21 @@ object KlondikeEngine {
         }
         val seenCycles = HashSet<Pair<List<Card>, List<Card>>>()
         while (true) {
-            val next = drawOrRecycle(sim) ?: return false
+            val next = drawOrRecycle(sim) ?: break
             val nextTop = next.waste.lastOrNull()
-            if (nextTop != null && isCardPlayable(state, nextTop)) {
-                return true
+            if (nextTop != null) {
+                val playable = if (nextTop.isFaceUp) nextTop else nextTop.copy(isFaceUp = true)
+                if (seenCards.add(playable)) {
+                    result.add(playable)
+                }
             }
             val cycleKey = next.stock to next.waste
             if (!seenCycles.add(cycleKey)) {
-                return false
+                break
             }
             sim = next
         }
+        return result
     }
 
     private fun isCardPlayable(state: GameState, card: Card): Boolean {
@@ -307,10 +337,12 @@ object KlondikeEngine {
 
     private fun findProgressiveSequenceFirstMove(
         initialState: GameState,
-        drawCount: Int
+        drawCount: Int,
+        isCancelled: () -> Boolean = { false }
     ): HintMove? {
         val initialFaceDownCount = countFaceDownCards(initialState)
         val initialFoundationCount = countFoundationCards(initialState)
+        val reachableStockCards = collectReachableStockCards(initialState, drawCount)
 
         val queue = ArrayDeque<SearchNode>()
         val visited = HashSet<BoardKey>()
@@ -318,6 +350,7 @@ object KlondikeEngine {
         queue.addLast(SearchNode(state = initialState, firstMove = null, depth = 0, foundationPulls = 0))
 
         while (queue.isNotEmpty() && visited.size < MAX_HINT_SEARCH_STATES) {
+            if (isCancelled()) return null
             val node = queue.removeFirst()
             if (node.depth >= MAX_HINT_SEARCH_DEPTH) continue
             val curr = node.state
@@ -338,7 +371,7 @@ object KlondikeEngine {
                         val nextState = moveCards(curr, from, cardIdx, to) ?: continue
                         val firstMove = node.firstMove ?: HintMove(from, cardIdx, to)
 
-                        if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, drawCount)) {
+                        if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, reachableStockCards)) {
                             return firstMove
                         }
                         if (visited.size < MAX_HINT_SEARCH_STATES && visited.add(BoardKey.from(nextState))) {
@@ -358,7 +391,7 @@ object KlondikeEngine {
                 val nextState = moveCards(curr, from, topIdx, target) ?: continue
                 val firstMove = node.firstMove ?: HintMove(from, topIdx, target)
 
-                if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, drawCount)) {
+                if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, reachableStockCards)) {
                     return firstMove
                 }
                 if (visited.size < MAX_HINT_SEARCH_STATES && visited.add(BoardKey.from(nextState))) {
@@ -378,7 +411,7 @@ object KlondikeEngine {
                         val nextState = moveCards(curr, from, topIdx, to) ?: continue
                         val firstMove = node.firstMove ?: HintMove(from, topIdx, to)
 
-                        if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, drawCount)) {
+                        if (isProgressAchieved(nextState, initialFaceDownCount, initialFoundationCount, reachableStockCards)) {
                             return firstMove
                         }
                         if (visited.size < MAX_HINT_SEARCH_STATES && visited.add(BoardKey.from(nextState))) {
@@ -398,12 +431,14 @@ object KlondikeEngine {
         state: GameState,
         initialFaceDownCount: Int,
         initialFoundationCount: Int,
-        drawCount: Int
+        reachableStockCards: List<Card>
     ): Boolean {
         if (countFaceDownCards(state) < initialFaceDownCount) return true
         if (countFoundationCards(state) > initialFoundationCount) return true
-        if ((state.stock.isNotEmpty() || state.waste.isNotEmpty()) && canStockProduceMove(state, drawCount)) {
-            return true
+        for (i in reachableStockCards.indices) {
+            if (isCardPlayable(state, reachableStockCards[i])) {
+                return true
+            }
         }
         return false
     }

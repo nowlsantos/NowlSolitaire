@@ -26,7 +26,8 @@ data class KlondikeUiState(
     val showNoMovesDialog: Boolean = false,
     val hintMessage: String? = null,
     val settings: GameSettings = GameSettings(),
-    val stats: GameStats = GameStats()
+    val stats: GameStats = GameStats(),
+    val dealId: Long = 0L
 ) {
     val isWon: Boolean
         get() = gameState.isWon && !isAutoCompleting

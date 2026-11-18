@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,19 +81,17 @@ internal fun DiscardPileView(
             )
 
             if (topDiscard != null && topDiscardFlyingState != null) {
-                key(topDiscard.id) {
-                    PlayingCardView(
-                        card = topDiscard,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        colors = colors,
-                        cardBackTheme = cardBackTheme,
-                        onClick = null,
-                        modifier = Modifier.graphicsLayer {
-                            alpha = if (topDiscardFlyingState.value) 0f else 1f
-                        }
-                    )
-                }
+                PlayingCardView(
+                    card = topDiscard,
+                    cardWidth = cardWidth,
+                    cardHeight = cardHeight,
+                    colors = colors,
+                    cardBackTheme = cardBackTheme,
+                    onClick = null,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = if (topDiscardFlyingState.value) 0f else 1f
+                    }
+                )
             }
 
             if (visibleCount > 0) {

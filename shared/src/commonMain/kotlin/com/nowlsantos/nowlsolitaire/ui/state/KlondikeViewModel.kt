@@ -46,9 +46,12 @@ class KlondikeViewModel(
     private var recordedAsPlayed = false
     private var recordedAsWon = false
     private var isTimerPaused = false
+    private var internalElapsedSeconds = 0
+    private var nextDealId = 1L
 
     private var autoCompleteJob: Job? = null
     private var deadlockJob: Job? = null
+    private var persistDebounceJob: Job? = null
     private val persistChannel = Channel<SavedGameSnapshot?>(Channel.CONFLATED)
 
     init {
@@ -78,7 +81,7 @@ class KlondikeViewModel(
             is KlondikeIntent.SetTimerPaused -> {
                 isTimerPaused = intent.paused
                 if (intent.paused && hasStartedMoving && !_uiState.value.isWon) {
-                    persistCurrentGame()
+                    persistCurrentGame(immediate = true)
                 }
             }
             is KlondikeIntent.UpdateDrawMode -> updateDrawMode(intent.drawMode)
@@ -88,7 +91,12 @@ class KlondikeViewModel(
             is KlondikeIntent.UpdateCardBackTheme -> updateSettings { it.copy(cardBackTheme = intent.cardBackTheme) }
             is KlondikeIntent.UpdateLeftHanded -> updateSettings { it.copy(leftHanded = intent.leftHanded) }
             is KlondikeIntent.UpdateTapToAutoMove -> updateSettings { it.copy(tapToAutoMove = intent.enabled) }
-            is KlondikeIntent.UpdateShowTimer -> updateSettings { it.copy(showTimer = intent.enabled) }
+            is KlondikeIntent.UpdateShowTimer -> {
+                if (intent.enabled) {
+                    _uiState.update { it.copy(elapsedSeconds = internalElapsedSeconds) }
+                }
+                updateSettings { it.copy(showTimer = intent.enabled) }
+            }
             KlondikeIntent.ResetStats -> viewModelScope.launch { repository.resetStats() }
         }
     }
@@ -119,18 +127,22 @@ class KlondikeViewModel(
                 hasStartedMoving = saved.hasStartedMoving
                 recordedAsPlayed = saved.recordedAsPlayed
                 recordedAsWon = saved.gameState.isWon
+                internalElapsedSeconds = saved.elapsedSeconds
                 val snapshot = session.currentState
                 val isDeadlocked = hasStartedMoving && withContext(defaultDispatcher) {
-                    !engine.hasAvailableMoves(snapshot)
+                    !engine.hasAvailableMoves(snapshot) { !coroutineContext.isActive }
                 }
+                val isOngoing = saved.hasStartedMoving || saved.gameState.moveCount > 0
+                val dealId = if (isOngoing) 0L else nextDealId++
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         gameState = session.currentState,
                         canUndo = session.canUndo,
-                        elapsedSeconds = saved.elapsedSeconds,
+                        elapsedSeconds = internalElapsedSeconds,
                         settings = settings,
-                        showNoMovesDialog = isDeadlocked
+                        showNoMovesDialog = isDeadlocked,
+                        dealId = dealId
                     )
                 }
             } else {
@@ -143,16 +155,18 @@ class KlondikeViewModel(
                 hasStartedMoving = false
                 recordedAsPlayed = false
                 recordedAsWon = false
+                internalElapsedSeconds = 0
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         gameState = session.currentState,
                         canUndo = false,
                         elapsedSeconds = 0,
-                        settings = settings
+                        settings = settings,
+                        dealId = nextDealId++
                     )
                 }
-                persistCurrentGame()
+                persistCurrentGame(immediate = true)
             }
         }
     }
@@ -168,7 +182,10 @@ class KlondikeViewModel(
                     !state.isWon &&
                     !state.isAutoCompleting
                 ) {
-                    _uiState.update { it.copy(elapsedSeconds = it.elapsedSeconds + 1) }
+                    internalElapsedSeconds += 1
+                    if (state.settings.showTimer) {
+                        _uiState.update { it.copy(elapsedSeconds = internalElapsedSeconds) }
+                    }
                 }
             }
         }
@@ -194,6 +211,7 @@ class KlondikeViewModel(
         hasStartedMoving = false
         recordedAsPlayed = false
         recordedAsWon = false
+        internalElapsedSeconds = 0
         _uiState.update {
             it.copy(
                 gameState = session.currentState,
@@ -203,10 +221,11 @@ class KlondikeViewModel(
                 activeHint = null,
                 isAutoCompleting = false,
                 showNoMovesDialog = false,
-                hintMessage = null
+                hintMessage = null,
+                dealId = nextDealId++
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = true)
     }
 
     private fun replayCurrentDeal() {
@@ -222,6 +241,7 @@ class KlondikeViewModel(
         hasStartedMoving = false
         recordedAsPlayed = false
         recordedAsWon = false
+        internalElapsedSeconds = 0
         _uiState.update {
             it.copy(
                 gameState = session.currentState,
@@ -231,10 +251,11 @@ class KlondikeViewModel(
                 activeHint = null,
                 isAutoCompleting = false,
                 showNoMovesDialog = false,
-                hintMessage = null
+                hintMessage = null,
+                dealId = nextDealId++
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = true)
     }
 
     private fun drawOrRecycle() {
@@ -261,7 +282,7 @@ class KlondikeViewModel(
                 hintMessage = null
             )
         }
-        persistCurrentGame()
+        persistCurrentGame(immediate = false)
     }
 
     private fun requestHint() {
@@ -269,7 +290,7 @@ class KlondikeViewModel(
         val snapshot = session.currentState
         viewModelScope.launch {
             val hint = withContext(defaultDispatcher) {
-                engine.findHint(snapshot)
+                engine.findHint(snapshot) { !coroutineContext.isActive }
             }
             if (!isActive ||
                 session.currentState !== snapshot ||
@@ -435,9 +456,14 @@ class KlondikeViewModel(
                     delay(300.milliseconds)
                 }
             } finally {
-                _uiState.update { it.copy(isAutoCompleting = false) }
+                _uiState.update {
+                    it.copy(
+                        isAutoCompleting = false,
+                        elapsedSeconds = internalElapsedSeconds
+                    )
+                }
                 onStateChangedCheckWin()
-                persistCurrentGame()
+                persistCurrentGame(immediate = true)
             }
         }
     }
@@ -462,7 +488,7 @@ class KlondikeViewModel(
             )
         }
         onStateChangedCheckWin()
-        persistCurrentGame()
+        persistCurrentGame(immediate = false)
 
         // Check deadlock in the background without blocking the UI thread!
         scheduleDeadlockCheck()
@@ -474,7 +500,7 @@ class KlondikeViewModel(
         if (snapshot.isWon || snapshot.isAutoCompleteReady || _uiState.value.isAutoCompleting || _uiState.value.isWon || _uiState.value.isAutoCompleteAvailable) return
         deadlockJob = viewModelScope.launch {
             val hasMoves = withContext(defaultDispatcher) {
-                engine.hasAvailableMoves(snapshot)
+                engine.hasAvailableMoves(snapshot) { !coroutineContext.isActive }
             }
             if (!hasMoves &&
                 isActive &&
@@ -494,10 +520,12 @@ class KlondikeViewModel(
         if (session.currentState.isWon && !recordedAsWon) {
             recordedAsWon = true
             val score = session.currentState.score
-            val elapsed = _uiState.value.elapsedSeconds
+            val elapsed = internalElapsedSeconds
+            _uiState.update { it.copy(elapsedSeconds = elapsed) }
             viewModelScope.launch {
                 repository.recordGameWon(score = score, elapsedSeconds = elapsed)
             }
+            persistDebounceJob?.cancel()
             persistChannel.trySend(null)
         }
     }
@@ -520,7 +548,7 @@ class KlondikeViewModel(
                 val updatedState = session.currentState.copy(deckPasses = deckPasses)
                 session = session.copy(currentState = updatedState)
                 _uiState.update { it.copy(gameState = updatedState, showNoMovesDialog = false) }
-                persistCurrentGame()
+                persistCurrentGame(immediate = true)
                 scheduleDeadlockCheck()
             }
         }
@@ -541,24 +569,39 @@ class KlondikeViewModel(
         }
     }
 
-    private fun persistCurrentGame() {
-        if (session.currentState.isWon) {
-            persistChannel.trySend(null)
-            return
-        }
-        val snapshot = SavedGameSnapshot(
+    private fun buildSnapshot(): SavedGameSnapshot? {
+        if (session.currentState.isWon) return null
+        return SavedGameSnapshot(
             gameState = session.currentState,
             undoStack = session.undoStack,
-            elapsedSeconds = _uiState.value.elapsedSeconds,
+            elapsedSeconds = internalElapsedSeconds,
             hasStartedMoving = hasStartedMoving,
             recordedAsPlayed = recordedAsPlayed
         )
-        persistChannel.trySend(snapshot)
+    }
+
+    private fun persistCurrentGame(immediate: Boolean = false) {
+        if (session.currentState.isWon) {
+            persistDebounceJob?.cancel()
+            persistChannel.trySend(null)
+            return
+        }
+        if (immediate) {
+            persistDebounceJob?.cancel()
+            persistChannel.trySend(buildSnapshot())
+        } else {
+            persistDebounceJob?.cancel()
+            persistDebounceJob = viewModelScope.launch {
+                delay(350.milliseconds)
+                persistChannel.trySend(buildSnapshot())
+            }
+        }
     }
 
     override fun onCleared() {
         autoCompleteJob?.cancel()
         deadlockJob?.cancel()
+        persistDebounceJob?.cancel()
         persistChannel.close()
     }
 }
