@@ -75,7 +75,7 @@ private class InPlaceFlipHolder(var lastFaceUp: Boolean) {
 
 val CardBorderColor: Color = Color(0x80000000)
 val CardBorderWidth: Dp = 1.dp
-val CardCornerRadius: Dp = 6.dp
+val CardCornerRadius: Dp = 5.dp
 
 private val CardShape = RoundedCornerShape(CardCornerRadius)
 
@@ -379,7 +379,7 @@ fun EmptyPileSlot(
     contentDescriptionText: String? = "Empty pile",
     onClick: (() -> Unit)? = null
 ) {
-    val shape = RoundedCornerShape(6.dp)
+    val shape = CardShape
     val strokeColor = when {
         isDropTarget -> colors.selectionGlow
         isHighlighted -> colors.hintGlow
