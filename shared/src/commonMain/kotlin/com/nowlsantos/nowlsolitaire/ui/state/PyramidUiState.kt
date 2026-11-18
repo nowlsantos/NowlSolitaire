@@ -7,6 +7,7 @@ import com.nowlsantos.nowlsolitaire.domain.model.GameStats
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidMatch
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
 import com.nowlsantos.nowlsolitaire.domain.model.TableTheme
 
@@ -20,6 +21,7 @@ data class PyramidUiState(
     val hintMessage: String? = null,
     val settings: PyramidSettings = PyramidSettings(),
     val stats: GameStats = GameStats(),
+    val runSession: PyramidRunSession = PyramidRunSession(),
     val lastMatchedResult: String? = null,
     val activeMatch: PyramidMatch? = null,
     val activeDrawCard: Card? = null,
@@ -41,6 +43,9 @@ data class PyramidUiState(
 sealed interface PyramidIntent {
     data object NewGame : PyramidIntent
     data object ReplayDeal : PyramidIntent
+    data object NextRound : PyramidIntent
+    data object ContinueRunWithLostLife : PyramidIntent
+    data object StartNewRun : PyramidIntent
     data object DrawOrRecycle : PyramidIntent
     data object Undo : PyramidIntent
     data object RequestHint : PyramidIntent

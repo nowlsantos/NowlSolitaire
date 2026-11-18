@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nowlsantos.nowlsolitaire.domain.model.GameStats
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunRecord
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
 import com.nowlsantos.nowlsolitaire.ui.components.formatDuration
 import kotlin.math.sin
 import kotlin.random.Random
@@ -119,7 +121,8 @@ fun NoMovesDialog(
 fun StatsDialog(
     stats: GameStats,
     onResetStats: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    pyramidTopRuns: List<PyramidRunRecord> = emptyList()
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -136,6 +139,31 @@ fun StatsDialog(
                     "Best Time",
                     stats.bestTimeSeconds?.let(::formatDuration) ?: "--:--"
                 )
+
+                if (pyramidTopRuns.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Top Pyramid Runs",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    pyramidTopRuns.forEachIndexed { index, run ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "#${index + 1}  Round ${run.roundReached}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${run.totalScore} pts (${run.maxStreak} streak)",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -239,6 +267,196 @@ fun WinOverlay(
             }
         }
     }
+}
+
+@Composable
+fun PyramidRoundWinOverlay(
+    round: Int,
+    roundScore: Int,
+    totalRunScore: Int,
+    streak: Int,
+    lives: Int,
+    maxLives: Int,
+    elapsedSeconds: Int,
+    moveCount: Int,
+    onNextRound: () -> Unit,
+    onReplay: () -> Unit,
+    showTimer: Boolean = false
+) {
+    val bonusLifeAwarded = streak == 3 || streak == 6 || (streak > 6 && streak % 3 == 0)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x99000000)),
+        contentAlignment = Alignment.Center
+    ) {
+        ConfettiOverlay(modifier = Modifier.fillMaxSize())
+
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.EmojiEvents,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(52.dp)
+                )
+                Text(
+                    text = "Round $round Cleared! 🎉",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                if (bonusLifeAwarded) {
+                    Text(
+                        text = "❤️ Bonus Life Earned! ($lives/$maxLives Lives)",
+                        color = Color(0xFFE53935),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else if (streak > 1) {
+                    val needed = 3 - (streak % 3)
+                    Text(
+                        text = "🔥 Win Streak: $streak ($needed more for +1 Life)",
+                        color = Color(0xFFFF9800),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatRow("Round Score", "+$roundScore pts")
+                    StatRow("Total Run Score", "$totalRunScore pts")
+                    if (showTimer) {
+                        StatRow("Time", formatDuration(elapsedSeconds))
+                    }
+                    StatRow("Moves", moveCount.toString())
+                }
+
+                val nextRound = round + 1
+                val nextTier = PyramidRunSession.getDifficultyTier(nextRound)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "Next: Round $nextRound • $nextTier",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onNextRound,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Next Round (Round $nextRound)")
+                    }
+                    OutlinedButton(
+                        onClick = onReplay,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Replay Deal")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PyramidLifeLostDialog(
+    remainingLives: Int,
+    canUndo: Boolean,
+    onUndo: () -> Unit,
+    onRetryDeal: () -> Unit,
+    onContinueNextDeal: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Round Over — 1 Life Lost 💔") },
+        text = {
+            Text(
+                text = "You reached an impasse with no available moves left.\n\nYou have $remainingLives ${if (remainingLives == 1) "life" else "lives"} remaining."
+            )
+        },
+        confirmButton = {
+            Button(onClick = onContinueNextDeal) {
+                Text("Next Deal")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canUndo) {
+                    TextButton(onClick = onUndo) {
+                        Text("Undo")
+                    }
+                }
+                OutlinedButton(onClick = onRetryDeal) {
+                    Text("Retry Deal")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun PyramidGameOverDialog(
+    finalRound: Int,
+    totalRunScore: Int,
+    bestStreak: Int,
+    onStartNewRun: () -> Unit,
+    onDismiss: () -> Unit,
+    canUndo: Boolean = false,
+    onUndo: (() -> Unit)? = null
+) {
+    val tier = PyramidRunSession.getDifficultyTier(finalRound)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Game Over — Out of Lives 💔") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("All lives have been consumed.")
+                Spacer(modifier = Modifier.height(4.dp))
+                StatRow("Final Round Reached", "Round $finalRound")
+                StatRow("Difficulty Tier", tier)
+                StatRow("Total Run Score", "$totalRunScore pts")
+                StatRow("Longest Streak", "$bestStreak wins")
+            }
+        },
+        confirmButton = {
+            Button(onClick = onStartNewRun) {
+                Text("Start New Run (3 Lives)")
+            }
+        },
+        dismissButton = if (canUndo && onUndo != null) {
+            {
+                TextButton(onClick = onUndo) {
+                    Text("Undo")
+                }
+            }
+        } else null
+    )
 }
 
 private data class ConfettiPiece(

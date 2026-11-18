@@ -55,6 +55,7 @@ fun KlondikeBoard(
     boardState: KlondikeBoardState,
     onIntent: (KlondikeIntent) -> Unit,
     modifier: Modifier = Modifier,
+    onBoardSettledChanged: (Boolean) -> Unit = {},
     onWinFlightsSettled: () -> Unit = {},
 ) {
     val colors = boardState.tableTheme.toColors()
@@ -86,6 +87,16 @@ fun KlondikeBoard(
     val latestBoardState by rememberUpdatedState(boardState)
     val latestOnIntent by rememberUpdatedState(onIntent)
     val latestOnWinFlightsSettled by rememberUpdatedState(onWinFlightsSettled)
+    val latestOnBoardSettledChanged by rememberUpdatedState(onBoardSettledChanged)
+
+    val isBoardSettled = activeFlightsState.value.isEmpty() &&
+        activeDragState.value == null &&
+        !isReturningHolder.value &&
+        !boardState.isAutoCompleting
+
+    LaunchedEffect(isBoardSettled) {
+        latestOnBoardSettledChanged(isBoardSettled)
+    }
 
     val getFlyingHiddenState = remember {
         { cardId: String ->

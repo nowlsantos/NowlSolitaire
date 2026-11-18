@@ -39,6 +39,8 @@ import com.nowlsantos.nowlsolitaire.ui.state.KlondikeUiState
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeViewModel
 import com.nowlsantos.nowlsolitaire.ui.theme.NowlSolitaireTheme
 import com.nowlsantos.nowlsolitaire.ui.theme.toColors
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -86,19 +88,49 @@ fun KlondikeScreen(
     var showNewGameDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showStatsDialog by remember { mutableStateOf(false) }
-    var isWaitingForWinFlight by remember { mutableStateOf(false) }
-    LaunchedEffect(uiState.isWon) {
-        isWaitingForWinFlight = uiState.isWon
-    }
-    val showWinOverlay = uiState.isWon && !isWaitingForWinFlight
 
-    val anyModalOpen = showNewGameDialog || showSettingsSheet || showStatsDialog || uiState.showNoMovesDialog
+    var isBoardSettled by remember { mutableStateOf(true) }
+    var shouldShowWinOverlay by remember { mutableStateOf(false) }
+    var shouldShowNoMovesDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.isWon, isBoardSettled, uiState.isAutoCompleting) {
+        if (uiState.isWon) {
+            shouldShowNoMovesDialog = false
+            if (isBoardSettled && !uiState.isAutoCompleting) {
+                delay(400.milliseconds)
+                if (uiState.isWon && isBoardSettled && !uiState.isAutoCompleting) {
+                    shouldShowWinOverlay = true
+                }
+            } else {
+                shouldShowWinOverlay = false
+            }
+        } else {
+            shouldShowWinOverlay = false
+        }
+    }
+
+    LaunchedEffect(uiState.showNoMovesDialog, isBoardSettled, uiState.isWon, uiState.isAutoCompleteAvailable) {
+        if (uiState.showNoMovesDialog && !uiState.isWon && !uiState.isAutoCompleteAvailable) {
+            if (isBoardSettled) {
+                delay(450.milliseconds)
+                if (uiState.showNoMovesDialog && !uiState.isWon && !uiState.isAutoCompleteAvailable && isBoardSettled) {
+                    shouldShowNoMovesDialog = true
+                }
+            } else {
+                shouldShowNoMovesDialog = false
+            }
+        } else {
+            shouldShowNoMovesDialog = false
+        }
+    }
+
+    val anyModalOpen = showNewGameDialog || showSettingsSheet || showStatsDialog || shouldShowNoMovesDialog
     LaunchedEffect(anyModalOpen) {
         onIntent(KlondikeIntent.SetTimerPaused(anyModalOpen))
     }
 
-    LaunchedEffect(showWinOverlay) {
-        if (showWinOverlay) {
+    LaunchedEffect(shouldShowWinOverlay) {
+        if (shouldShowWinOverlay) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
@@ -170,7 +202,8 @@ fun KlondikeScreen(
                     KlondikeBoard(
                         boardState = boardState,
                         onIntent = onIntent,
-                        onWinFlightsSettled = { isWaitingForWinFlight = false }
+                        onBoardSettledChanged = { settled -> isBoardSettled = settled },
+                        onWinFlightsSettled = { isBoardSettled = true }
                     )
                 }
             }
@@ -193,7 +226,7 @@ fun KlondikeScreen(
                 .navigationBarsPadding()
         )
 
-        if (showWinOverlay) {
+        if (shouldShowWinOverlay) {
             WinOverlay(
                 score = uiState.score,
                 elapsedSeconds = uiState.elapsedSeconds,
@@ -218,7 +251,7 @@ fun KlondikeScreen(
             )
         }
 
-        if (uiState.showNoMovesDialog) {
+        if (shouldShowNoMovesDialog) {
             NoMovesDialog(
                 canUndo = uiState.canUndo,
                 onUndo = {

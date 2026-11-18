@@ -223,6 +223,7 @@ object KlondikeEngine {
 
     fun hasAvailableMoves(state: GameState, drawCount: Int = state.drawMode.drawCount): Boolean {
         if (state.isWon) return false
+        if (state.isAutoCompleteReady) return true
         if (state.stock.isNotEmpty()) return true
         if (state.canRecycleStock && canStockProduceMove(state, drawCount)) return true
         return findHint(state, drawCount) != null

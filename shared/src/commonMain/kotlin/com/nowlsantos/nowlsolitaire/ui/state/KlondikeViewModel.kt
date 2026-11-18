@@ -295,12 +295,14 @@ class KlondikeViewModel(
                     )
                 }
             } else {
-                _uiState.update {
-                    it.copy(
-                        activeHint = null,
-                        selection = null,
-                        showNoMovesDialog = true
-                    )
+                if (!snapshot.isWon && !snapshot.isAutoCompleteReady && !_uiState.value.isWon && !_uiState.value.isAutoCompleteAvailable) {
+                    _uiState.update {
+                        it.copy(
+                            activeHint = null,
+                            selection = null,
+                            showNoMovesDialog = true
+                        )
+                    }
                 }
             }
         }
@@ -469,7 +471,7 @@ class KlondikeViewModel(
     private fun scheduleDeadlockCheck() {
         deadlockJob?.cancel()
         val snapshot = session.currentState
-        if (snapshot.isWon || _uiState.value.isAutoCompleting) return
+        if (snapshot.isWon || snapshot.isAutoCompleteReady || _uiState.value.isAutoCompleting || _uiState.value.isWon || _uiState.value.isAutoCompleteAvailable) return
         deadlockJob = viewModelScope.launch {
             val hasMoves = withContext(defaultDispatcher) {
                 engine.hasAvailableMoves(snapshot)
@@ -478,7 +480,10 @@ class KlondikeViewModel(
                 isActive &&
                 session.currentState === snapshot &&
                 !_uiState.value.isAutoCompleting &&
-                !snapshot.isWon
+                !snapshot.isWon &&
+                !snapshot.isAutoCompleteReady &&
+                !_uiState.value.isWon &&
+                !_uiState.value.isAutoCompleteAvailable
             ) {
                 _uiState.update { it.copy(showNoMovesDialog = true) }
             }

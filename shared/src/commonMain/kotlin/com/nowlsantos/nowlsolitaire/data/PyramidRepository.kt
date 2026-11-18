@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nowlsantos.nowlsolitaire.domain.model.GameStats
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
 import com.nowlsantos.nowlsolitaire.domain.model.SavedPyramidGameSnapshot
 import kotlinx.coroutines.flow.Flow
@@ -16,9 +17,12 @@ import kotlinx.serialization.json.Json
 interface PyramidRepository {
     val settingsFlow: Flow<PyramidSettings>
     val statsFlow: Flow<GameStats>
+    val runSessionFlow: Flow<PyramidRunSession>
 
     suspend fun loadSavedGame(): SavedPyramidGameSnapshot?
     suspend fun saveGame(snapshot: SavedPyramidGameSnapshot?)
+    suspend fun loadRunSession(): PyramidRunSession
+    suspend fun saveRunSession(session: PyramidRunSession)
     suspend fun updateSettings(transform: (PyramidSettings) -> PyramidSettings)
     suspend fun recordGamePlayed()
     suspend fun recordGameWon(score: Int, elapsedSeconds: Int)
@@ -46,6 +50,23 @@ class DataStorePyramidRepository(
         prefs[KEY_STATS]?.let { raw ->
             runCatching { json.decodeFromString<GameStats>(raw) }.getOrNull()
         } ?: GameStats()
+    }
+
+    override val runSessionFlow: Flow<PyramidRunSession> = dataStore.data.map { prefs ->
+        prefs[KEY_RUN_SESSION]?.let { raw ->
+            runCatching { json.decodeFromString<PyramidRunSession>(raw) }.getOrNull()
+        } ?: PyramidRunSession()
+    }
+
+    override suspend fun loadRunSession(): PyramidRunSession {
+        val raw = dataStore.data.first()[KEY_RUN_SESSION] ?: return PyramidRunSession()
+        return runCatching { json.decodeFromString<PyramidRunSession>(raw) }.getOrNull() ?: PyramidRunSession()
+    }
+
+    override suspend fun saveRunSession(session: PyramidRunSession) {
+        dataStore.edit { prefs ->
+            prefs[KEY_RUN_SESSION] = json.encodeToString(session)
+        }
     }
 
     override suspend fun loadSavedGame(): SavedPyramidGameSnapshot? {
@@ -122,6 +143,7 @@ class DataStorePyramidRepository(
         val KEY_SETTINGS = stringPreferencesKey("pyramid_settings_json")
         val KEY_STATS = stringPreferencesKey("pyramid_stats_json")
         val KEY_SAVED_GAME = stringPreferencesKey("pyramid_saved_game_json")
+        val KEY_RUN_SESSION = stringPreferencesKey("pyramid_run_session_json")
         val KEY_TIMER_MIGRATED = booleanPreferencesKey("pyramid_timer_default_migrated_v1")
     }
 }

@@ -54,7 +54,11 @@ fun GameTopBar(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
-    showTimer: Boolean = false
+    showTimer: Boolean = false,
+    roundNumber: Int? = null,
+    lives: Int? = null,
+    maxLives: Int = 3,
+    streak: Int? = null
 ) {
     val containerSize = LocalWindowInfo.current.containerSize
     val isLandscape = containerSize.width > containerSize.height
@@ -68,7 +72,7 @@ fun GameTopBar(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (onBack != null) {
@@ -79,6 +83,15 @@ fun GameTopBar(
                         tint = colors.barContent
                     )
                 }
+            }
+            if (roundNumber != null) {
+                HudMetric(label = "ROUND", value = roundNumber.toString(), contentColor = colors.barContent)
+            }
+            if (lives != null) {
+                HudLives(lives = lives, maxLives = maxLives, contentColor = colors.barContent)
+            }
+            if (streak != null && streak > 0) {
+                HudStreak(streak = streak, contentColor = colors.barContent)
             }
             HudMetric(label = "SCORE", value = score.toString(), contentColor = colors.barContent)
             if (showTimer) {
@@ -239,6 +252,57 @@ private fun HudMetric(
         Text(
             text = value,
             color = contentColor,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun HudLives(
+    lives: Int,
+    maxLives: Int,
+    contentColor: Color
+) {
+    Column {
+        Text(
+            text = "LIVES",
+            color = contentColor.copy(alpha = 0.65f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.8.sp
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(maxLives) { index ->
+                val isFilled = index < lives
+                Text(
+                    text = if (isFilled) "❤️" else "🖤",
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HudStreak(
+    streak: Int,
+    contentColor: Color
+) {
+    Column {
+        Text(
+            text = "STREAK",
+            color = Color(0xFFFFA000),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.8.sp
+        )
+        Text(
+            text = "🔥$streak",
+            color = Color(0xFFFFB300),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )

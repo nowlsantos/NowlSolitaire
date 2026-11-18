@@ -9,6 +9,7 @@ import com.nowlsantos.nowlsolitaire.domain.engine.PyramidRules
 import com.nowlsantos.nowlsolitaire.domain.engine.PyramidSession
 import com.nowlsantos.nowlsolitaire.domain.model.DealMode
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
+import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidSettings
 import com.nowlsantos.nowlsolitaire.domain.model.SavedPyramidGameSnapshot
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +33,7 @@ class PyramidViewModel(
     val uiState: StateFlow<PyramidUiState> = _uiState.asStateFlow()
 
     private var session: PyramidSession = PyramidSession.newGame()
+    private var runSession: PyramidRunSession = PyramidRunSession()
     private var hasStartedMoving = false
     private var recordedAsPlayed = false
     private var recordedAsWon = false
@@ -55,6 +57,9 @@ class PyramidViewModel(
         when (intent) {
             PyramidIntent.NewGame -> startNewGame()
             PyramidIntent.ReplayDeal -> replayCurrentDeal()
+            PyramidIntent.NextRound -> nextRound()
+            PyramidIntent.ContinueRunWithLostLife -> continueRunWithLostLife()
+            PyramidIntent.StartNewRun -> startNewRun()
             PyramidIntent.DrawOrRecycle -> drawOrRecycle()
             PyramidIntent.Undo -> undoMove()
             PyramidIntent.RequestHint -> requestHint()
@@ -95,7 +100,14 @@ class PyramidViewModel(
     private fun initializeGame() {
         viewModelScope.launch {
             val saved = repository.loadSavedGame()
+            val loadedRun = repository.loadRunSession()
             val settings = repository.settingsFlow.first()
+
+            runSession = if (saved != null && !saved.gameState.isWon) {
+                saved.runSession
+            } else {
+                loadedRun
+            }
 
             if (saved != null && !saved.gameState.isWon) {
                 val normalizedState = if (saved.gameState.stock.any { !it.isFaceUp }) {
@@ -127,6 +139,7 @@ class PyramidViewModel(
                         canUndo = session.canUndo,
                         elapsedSeconds = saved.elapsedSeconds,
                         settings = settings,
+                        runSession = runSession,
                         showNoMovesDialog = isDeadlocked,
                         dealId = dealId
                     )
@@ -139,8 +152,9 @@ class PyramidViewModel(
 
     private fun startFreshDeal(settings: PyramidSettings) {
         val dealId = nextDealId++
+        val effectiveRecycles = PyramidRunSession.getEffectiveMaxRecycles(runSession.currentRound, settings.maxRecycles)
         session = PyramidSession.newGame(
-            maxRecycles = settings.maxRecycles,
+            maxRecycles = effectiveRecycles,
             dealMode = settings.dealMode
         )
         hasStartedMoving = false
@@ -156,6 +170,7 @@ class PyramidViewModel(
                 showNoMovesDialog = false,
                 hintMessage = null,
                 settings = settings,
+                runSession = runSession,
                 lastMatchedResult = null,
                 activeMatch = null,
                 activeDrawCard = null,
@@ -183,6 +198,7 @@ class PyramidViewModel(
                 activeHint = null,
                 showNoMovesDialog = false,
                 hintMessage = null,
+                runSession = runSession,
                 lastMatchedResult = null,
                 activeMatch = null,
                 activeDrawCard = null,
@@ -190,6 +206,56 @@ class PyramidViewModel(
             )
         }
         persistCurrentGame()
+    }
+
+    private fun nextRound() {
+        val nextRoundNum = runSession.currentRound + 1
+        runSession = runSession.copy(
+            currentRound = nextRoundNum,
+            bestRoundRecord = maxOf(runSession.bestRoundRecord, nextRoundNum)
+        )
+        viewModelScope.launch {
+            repository.saveRunSession(runSession)
+        }
+        startFreshDeal(_uiState.value.settings)
+    }
+
+    private fun continueRunWithLostLife() {
+        val remainingLives = (runSession.lives - 1).coerceAtLeast(0)
+        val isGameOver = remainingLives <= 0
+        val sessionWithLoss = runSession.copy(
+            lives = remainingLives,
+            consecutiveWins = 0,
+            isGameOver = isGameOver
+        )
+        runSession = if (isGameOver) {
+            sessionWithLoss.withRunRecorded()
+        } else {
+            sessionWithLoss
+        }
+        viewModelScope.launch {
+            repository.saveRunSession(runSession)
+        }
+        if (!isGameOver) {
+            startFreshDeal(_uiState.value.settings)
+        } else {
+            _uiState.update { it.copy(runSession = runSession, showNoMovesDialog = false) }
+        }
+    }
+
+    private fun startNewRun() {
+        val sessionWithRecord = runSession.withRunRecorded()
+        val bestRound = maxOf(sessionWithRecord.bestRoundRecord, sessionWithRecord.currentRound)
+        val bestStreak = maxOf(sessionWithRecord.bestStreakRecord, sessionWithRecord.consecutiveWins)
+        runSession = PyramidRunSession(
+            bestRoundRecord = bestRound,
+            bestStreakRecord = bestStreak,
+            topRuns = sessionWithRecord.topRuns
+        )
+        viewModelScope.launch {
+            repository.saveRunSession(runSession)
+        }
+        startFreshDeal(_uiState.value.settings)
     }
 
     private fun drawOrRecycle() {
@@ -237,9 +303,32 @@ class PyramidViewModel(
                 val isWon = result.isVictory
                 if (isWon && !recordedAsWon) {
                     recordedAsWon = true
+                    val roundScore = session.currentState.score
+                    val newStreak = runSession.consecutiveWins + 1
+                    val bonusLives = when {
+                        newStreak == 3 -> 1
+                        newStreak == 6 -> 2
+                        newStreak > 6 && newStreak % 3 == 0 -> 1
+                        else -> 0
+                    }
+                    val newLives = minOf(runSession.maxLives, runSession.lives + bonusLives)
+                    val streakBonus = newStreak * 50
+                    val newTotalScore = runSession.totalRunScore + roundScore + streakBonus
+                    val newBestRound = maxOf(runSession.bestRoundRecord, runSession.currentRound)
+                    val newBestStreak = maxOf(runSession.bestStreakRecord, newStreak)
+
+                    runSession = runSession.copy(
+                        lives = newLives,
+                        consecutiveWins = newStreak,
+                        totalRunScore = newTotalScore,
+                        bestRoundRecord = newBestRound,
+                        bestStreakRecord = newBestStreak,
+                        isGameOver = false
+                    )
                     viewModelScope.launch {
+                        repository.saveRunSession(runSession)
                         repository.recordGameWon(
-                            score = session.currentState.score,
+                            score = roundScore,
                             elapsedSeconds = _uiState.value.elapsedSeconds
                         )
                     }
@@ -251,6 +340,7 @@ class PyramidViewModel(
                         gameState = session.currentState,
                         canUndo = session.canUndo,
                         showNoMovesDialog = isDeadlocked,
+                        runSession = runSession,
                         lastMatchedResult = "+${result.pointsEarned} pts",
                         activeMatch = result.match
                     )
@@ -390,7 +480,8 @@ class PyramidViewModel(
             undoStack = session.undoStack,
             elapsedSeconds = _uiState.value.elapsedSeconds,
             hasStartedMoving = hasStartedMoving,
-            recordedAsPlayed = recordedAsPlayed
+            recordedAsPlayed = recordedAsPlayed,
+            runSession = runSession
         )
         persistChannel.trySend(snapshot)
     }

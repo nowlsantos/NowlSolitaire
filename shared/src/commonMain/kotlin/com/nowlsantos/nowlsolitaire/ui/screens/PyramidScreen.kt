@@ -35,6 +35,8 @@ import com.nowlsantos.nowlsolitaire.ui.state.PyramidIntent
 import com.nowlsantos.nowlsolitaire.ui.state.PyramidUiState
 import com.nowlsantos.nowlsolitaire.ui.state.PyramidViewModel
 import com.nowlsantos.nowlsolitaire.ui.theme.toColors
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -82,16 +84,49 @@ fun PyramidScreen(
     var showNewGameDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showStatsDialog by remember { mutableStateOf(false) }
-    var isWaitingForWinFlight by remember(uiState.isWon) { mutableStateOf(uiState.isWon) }
-    val showWinOverlay = uiState.isWon && !isWaitingForWinFlight
 
-    val anyModalOpen = showNewGameDialog || showSettingsSheet || showStatsDialog || uiState.showNoMovesDialog
+    var isBoardSettled by remember { mutableStateOf(true) }
+    var shouldShowWinOverlay by remember { mutableStateOf(false) }
+    var shouldShowNoMovesDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.isWon, isBoardSettled) {
+        if (uiState.isWon) {
+            shouldShowNoMovesDialog = false
+            if (isBoardSettled) {
+                delay(400.milliseconds)
+                if (uiState.isWon && isBoardSettled) {
+                    shouldShowWinOverlay = true
+                }
+            } else {
+                shouldShowWinOverlay = false
+            }
+        } else {
+            shouldShowWinOverlay = false
+        }
+    }
+
+    LaunchedEffect(uiState.showNoMovesDialog, isBoardSettled, uiState.isWon) {
+        if (uiState.showNoMovesDialog && !uiState.isWon) {
+            if (isBoardSettled) {
+                delay(450.milliseconds)
+                if (uiState.showNoMovesDialog && !uiState.isWon && isBoardSettled) {
+                    shouldShowNoMovesDialog = true
+                }
+            } else {
+                shouldShowNoMovesDialog = false
+            }
+        } else {
+            shouldShowNoMovesDialog = false
+        }
+    }
+
+    val anyModalOpen = showNewGameDialog || showSettingsSheet || showStatsDialog || shouldShowNoMovesDialog
     LaunchedEffect(anyModalOpen) {
         onIntent(PyramidIntent.SetTimerPaused(anyModalOpen))
     }
 
-    LaunchedEffect(showWinOverlay) {
-        if (showWinOverlay) {
+    LaunchedEffect(shouldShowWinOverlay) {
+        if (shouldShowWinOverlay) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
@@ -129,7 +164,11 @@ fun PyramidScreen(
                 onOpenStats = { showStatsDialog = true },
                 onOpenSettings = { showSettingsSheet = true },
                 onBack = onBack,
-                showTimer = uiState.settings.showTimer
+                showTimer = uiState.settings.showTimer,
+                roundNumber = uiState.runSession.currentRound,
+                lives = uiState.runSession.lives,
+                maxLives = uiState.runSession.maxLives,
+                streak = uiState.runSession.consecutiveWins
             )
 
             Box(
@@ -163,7 +202,8 @@ fun PyramidScreen(
                     PyramidBoard(
                         boardState = boardState,
                         onIntent = onIntent,
-                        onWinFlightsSettled = { isWaitingForWinFlight = false }
+                        onBoardSettledChanged = { settled -> isBoardSettled = settled },
+                        onWinFlightsSettled = { isBoardSettled = true }
                     )
                 }
             }
@@ -186,13 +226,18 @@ fun PyramidScreen(
                 .navigationBarsPadding()
         )
 
-        if (showWinOverlay) {
-            WinOverlay(
-                score = uiState.score,
+        if (shouldShowWinOverlay) {
+            PyramidRoundWinOverlay(
+                round = uiState.runSession.currentRound,
+                roundScore = uiState.score,
+                totalRunScore = uiState.runSession.totalRunScore,
+                streak = uiState.runSession.consecutiveWins,
+                lives = uiState.runSession.lives,
+                maxLives = uiState.runSession.maxLives,
                 elapsedSeconds = uiState.elapsedSeconds,
                 moveCount = uiState.moveCount,
+                onNextRound = { onIntent(PyramidIntent.NextRound) },
                 onReplay = { onIntent(PyramidIntent.ReplayDeal) },
-                onNewDeal = { onIntent(PyramidIntent.NewGame) },
                 showTimer = uiState.settings.showTimer
             )
         }
@@ -211,23 +256,42 @@ fun PyramidScreen(
             )
         }
 
-        if (uiState.showNoMovesDialog) {
-            NoMovesDialog(
-                canUndo = uiState.canUndo,
-                onUndo = {
-                    onIntent(PyramidIntent.DismissNoMovesDialog)
-                    onIntent(PyramidIntent.Undo)
-                },
-                onReplayDeal = {
-                    onIntent(PyramidIntent.DismissNoMovesDialog)
-                    onIntent(PyramidIntent.ReplayDeal)
-                },
-                onNewDeal = {
-                    onIntent(PyramidIntent.DismissNoMovesDialog)
-                    onIntent(PyramidIntent.NewGame)
-                },
-                onDismiss = { onIntent(PyramidIntent.DismissNoMovesDialog) }
-            )
+        if (shouldShowNoMovesDialog) {
+            if (uiState.runSession.isGameOver || uiState.runSession.lives <= 1) {
+                PyramidGameOverDialog(
+                    finalRound = uiState.runSession.currentRound,
+                    totalRunScore = uiState.runSession.totalRunScore,
+                    bestStreak = maxOf(uiState.runSession.bestStreakRecord, uiState.runSession.consecutiveWins),
+                    canUndo = uiState.canUndo,
+                    onUndo = {
+                        onIntent(PyramidIntent.DismissNoMovesDialog)
+                        onIntent(PyramidIntent.Undo)
+                    },
+                    onStartNewRun = {
+                        onIntent(PyramidIntent.DismissNoMovesDialog)
+                        onIntent(PyramidIntent.StartNewRun)
+                    },
+                    onDismiss = { onIntent(PyramidIntent.DismissNoMovesDialog) }
+                )
+            } else {
+                PyramidLifeLostDialog(
+                    remainingLives = uiState.runSession.lives - 1,
+                    canUndo = uiState.canUndo,
+                    onUndo = {
+                        onIntent(PyramidIntent.DismissNoMovesDialog)
+                        onIntent(PyramidIntent.Undo)
+                    },
+                    onRetryDeal = {
+                        onIntent(PyramidIntent.DismissNoMovesDialog)
+                        onIntent(PyramidIntent.ReplayDeal)
+                    },
+                    onContinueNextDeal = {
+                        onIntent(PyramidIntent.DismissNoMovesDialog)
+                        onIntent(PyramidIntent.ContinueRunWithLostLife)
+                    },
+                    onDismiss = { onIntent(PyramidIntent.DismissNoMovesDialog) }
+                )
+            }
         }
 
         if (showSettingsSheet) {
@@ -242,7 +306,8 @@ fun PyramidScreen(
             StatsDialog(
                 stats = uiState.stats,
                 onResetStats = { onIntent(PyramidIntent.ResetStats) },
-                onDismiss = { showStatsDialog = false }
+                onDismiss = { showStatsDialog = false },
+                pyramidTopRuns = uiState.runSession.topRuns
             )
         }
     }

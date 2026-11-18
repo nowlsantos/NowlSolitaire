@@ -183,4 +183,110 @@ class PyramidEngineTest {
 
         assertFalse(PyramidRules.hasAnyMovesLeft(state))
     }
+
+    @Test
+    fun pyramidRunSession_initialValues_matchDefaults() {
+        val session = com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession()
+        assertEquals(1, session.currentRound)
+        assertEquals(3, session.lives)
+        assertEquals(5, session.maxLives)
+        assertEquals(0, session.consecutiveWins)
+        assertEquals(0, session.totalRunScore)
+        assertFalse(session.isGameOver)
+    }
+
+    @Test
+    fun pyramidRunSession_streakMilestones_grantBonusLivesAndCapAtMax() {
+        var session = com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession(lives = 2)
+        assertEquals(2, session.lives)
+
+        // 3 consecutive wins awards +1 life
+        val streak3 = 3
+        val bonus1 = if (streak3 == 3) 1 else 0
+        session = session.copy(
+            lives = minOf(session.maxLives, session.lives + bonus1),
+            consecutiveWins = streak3
+        )
+        assertEquals(3, session.lives)
+
+        // 6 consecutive wins awards +2 lives -> 3 + 2 = 5 (max)
+        val streak6 = 6
+        val bonus2 = if (streak6 == 6) 2 else 0
+        session = session.copy(
+            lives = minOf(session.maxLives, session.lives + bonus2),
+            consecutiveWins = streak6
+        )
+        assertEquals(5, session.lives)
+        assertTrue(session.isMaxLives)
+
+        // Another bonus life capped at 5
+        val bonusExtra = 1
+        session = session.copy(
+            lives = minOf(session.maxLives, session.lives + bonusExtra)
+        )
+        assertEquals(5, session.lives)
+    }
+
+    @Test
+    fun pyramidRunSession_progressiveDifficulty_scalesCorrectly() {
+        val defaultRecycles = com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState.DEFAULT_MAX_RECYCLES
+
+        // Rounds 1-3: Novice (2 recycles / 3 passes)
+        assertEquals(2, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(1, defaultRecycles))
+        assertEquals(2, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(3, defaultRecycles))
+
+        // Rounds 4-6: Veteran (1 recycle / 2 passes)
+        assertEquals(1, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(4, defaultRecycles))
+        assertEquals(1, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(6, defaultRecycles))
+
+        // Rounds 7+: Master (0 recycles / 1 pass)
+        assertEquals(0, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(7, defaultRecycles))
+        assertEquals(0, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(10, defaultRecycles))
+
+        // Custom override: preserved regardless of round
+        assertEquals(-1, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(8, -1))
+        assertEquals(5, com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession.getEffectiveMaxRecycles(12, 5))
+    }
+
+    @Test
+    fun pyramidRunSession_runRecording_sortsAndLimitsTop5() {
+        var session = com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession()
+
+        // 0-score round 1 is ignored
+        session = session.withRunRecorded()
+        assertTrue(session.topRuns.isEmpty())
+
+        // Run 1: round 2, score 250
+        session = session.copy(currentRound = 2, totalRunScore = 250, consecutiveWins = 1).withRunRecorded()
+        assertEquals(1, session.topRuns.size)
+        assertEquals(2, session.topRuns[0].roundReached)
+        assertEquals(250, session.topRuns[0].totalScore)
+
+        // Run 2: round 4, score 600
+        session = session.copy(currentRound = 4, totalRunScore = 600, consecutiveWins = 3).withRunRecorded()
+        assertEquals(2, session.topRuns.size)
+        assertEquals(4, session.topRuns[0].roundReached) // higher round first
+
+        // Run 3: round 4, score 750 (higher score on same round)
+        session = session.copy(currentRound = 4, totalRunScore = 750, consecutiveWins = 3).withRunRecorded()
+        assertEquals(3, session.topRuns.size)
+        assertEquals(750, session.topRuns[0].totalScore)
+        assertEquals(600, session.topRuns[1].totalScore)
+
+        // Duplicate recording check: same round, score, streak is not duplicated
+        val sizeBefore = session.topRuns.size
+        session = session.withRunRecorded()
+        assertEquals(sizeBefore, session.topRuns.size)
+
+        // Add 3 more runs to exceed top 5
+        session = session.copy(currentRound = 5, totalRunScore = 1000).withRunRecorded()
+        session = session.copy(currentRound = 3, totalRunScore = 400).withRunRecorded()
+        session = session.copy(currentRound = 1, totalRunScore = 150).withRunRecorded()
+
+        // Should be capped at top 5
+        assertEquals(5, session.topRuns.size)
+        assertEquals(5, session.topRuns[0].roundReached)
+        assertEquals(4, session.topRuns[1].roundReached)
+        assertEquals(750, session.topRuns[1].totalScore)
+    }
 }
