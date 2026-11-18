@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.nowlsantos.nowlsolitaire.domain.model.CardBackTheme
+import com.nowlsantos.nowlsolitaire.ui.components.drawCardOutline
 import com.nowlsantos.nowlsolitaire.ui.components.getCardBackDrawableRes
 import com.nowlsantos.nowlsolitaire.ui.components.getCardDrawableRes
 import org.jetbrains.compose.resources.imageResource
@@ -167,6 +168,7 @@ internal fun KlondikeFlipFlightCard(
                     image = bitmapToDraw,
                     dstSize = IntSize(w, h)
                 )
+                drawCardOutline()
             }
         }
     }

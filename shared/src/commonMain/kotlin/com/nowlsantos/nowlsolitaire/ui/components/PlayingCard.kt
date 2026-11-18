@@ -42,6 +42,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
@@ -72,7 +73,31 @@ private class InPlaceFlipHolder(var lastFaceUp: Boolean) {
     var currentAngle: Float = if (lastFaceUp) 180f else 0f
 }
 
-private val CardShape = RoundedCornerShape(6.dp)
+val CardBorderColor: Color = Color(0x80000000)
+val CardBorderWidth: Dp = 1.dp
+val CardCornerRadius: Dp = 6.dp
+
+private val CardShape = RoundedCornerShape(CardCornerRadius)
+
+fun DrawScope.drawCardOutline(
+    color: Color = CardBorderColor,
+    strokeWidthDp: Dp = CardBorderWidth,
+    cornerDp: Dp = CardCornerRadius
+) {
+    val strokeWidth = strokeWidthDp.toPx()
+    val half = strokeWidth * 0.5f
+    val corner = cornerDp.toPx()
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(half, half),
+        size = Size(
+            (size.width - strokeWidth).coerceAtLeast(1f),
+            (size.height - strokeWidth).coerceAtLeast(1f)
+        ),
+        cornerRadius = CornerRadius(corner, corner),
+        style = Stroke(width = strokeWidth)
+    )
+}
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -226,6 +251,7 @@ fun PlayingCardView(
                     image = backBitmap,
                     dstSize = IntSize(w, h)
                 )
+                drawCardOutline(color = colors.cardBorder)
             }
         }
     } else if (showFront && !isMidFlip && externalFlip == null) {
@@ -254,7 +280,7 @@ fun PlayingCardView(
             if (highlightColor != null) {
                 val highlightStrokeWidth = 2.2.dp.toPx()
                 val halfStroke = highlightStrokeWidth * 0.5f
-                val corner = 6.dp.toPx()
+                val corner = CardCornerRadius.toPx()
                 drawRoundRect(
                     color = highlightColor,
                     topLeft = Offset(halfStroke, halfStroke),
@@ -265,15 +291,17 @@ fun PlayingCardView(
                     cornerRadius = CornerRadius(corner, corner),
                     style = Stroke(width = highlightStrokeWidth)
                 )
+            } else {
+                drawCardOutline(color = colors.cardBorder)
             }
         }
     } else {
         val borderStroke = when {
             isSelected -> BorderStroke(2.2.dp, colors.selectionGlow)
             isHinted -> BorderStroke(2.2.dp, colors.hintGlow)
-            else -> null
+            else -> BorderStroke(CardBorderWidth, colors.cardBorder)
         }
-        val borderModifier = if (borderStroke != null) Modifier.border(borderStroke, CardShape) else Modifier
+        val borderModifier = Modifier.border(borderStroke, CardShape)
         Box(
             modifier = modifier
                 .width(cardWidth)
