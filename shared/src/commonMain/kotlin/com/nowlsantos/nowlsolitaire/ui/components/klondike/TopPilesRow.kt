@@ -21,6 +21,8 @@ import com.nowlsantos.nowlsolitaire.domain.model.PileLocation
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeIntent
 import com.nowlsantos.nowlsolitaire.ui.theme.TableColors
 
+internal const val WASTE_FAN_STEP_RATIO = 0.36f
+
 @Composable
 internal fun TopPilesRow(
     boardState: KlondikeBoardState,
@@ -44,7 +46,7 @@ internal fun TopPilesRow(
     val state = boardState.gameState
     val waste = state.waste
     val visibleCount = if (waste.isEmpty()) 0 else state.wasteVisibleCount.coerceIn(1, minOf(3, waste.size))
-    val fanStep = cardWidth * 0.28f
+    val fanStep = cardWidth * WASTE_FAN_STEP_RATIO
     val extraFanWidth = if (visibleCount > 1) fanStep * (visibleCount - 1) else 0.dp
     val spacerWidth = (cardWidth - extraFanWidth).coerceAtLeast(0.dp)
 

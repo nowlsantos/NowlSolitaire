@@ -6,11 +6,10 @@ import androidx.compose.animation.core.TargetBasedAnimation
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
@@ -234,135 +236,62 @@ fun PlayingCardView(
         else -> Modifier
     }
 
-    if (!showFront && !isMidFlip && !isSelected && !isHinted) {
-        val backBitmap = imageResource(getCardBackDrawableRes(cardBackTheme))
-        Canvas(
-            modifier = modifier
-                .width(cardWidth)
-                .height(cardHeight)
-                .then(elevationModifier)
-                .semantics { contentDescription = cardDescription }
-                .then(clickableModifier)
-        ) {
-            val w = size.width.roundToInt()
-            val h = size.height.roundToInt()
-            if (w > 0 && h > 0) {
-                drawImage(
-                    image = backBitmap,
-                    dstSize = IntSize(w, h)
-                )
-                drawCardOutline(color = colors.cardBorder)
-            }
-        }
-    } else if (showFront && !isMidFlip && externalFlip == null) {
-        val frontBitmap = imageResource(getCardDrawableRes(card))
-        val highlightColor = when {
-            isSelected -> colors.selectionGlow
-            isHinted -> colors.hintGlow
-            else -> null
-        }
-        Canvas(
-            modifier = modifier
-                .width(cardWidth)
-                .height(cardHeight)
-                .then(elevationModifier)
-                .semantics { contentDescription = cardDescription }
-                .then(clickableModifier)
-        ) {
-            val w = size.width.roundToInt()
-            val h = size.height.roundToInt()
-            if (w > 0 && h > 0) {
-                drawImage(
-                    image = frontBitmap,
-                    dstSize = IntSize(w, h)
-                )
-            }
-            if (highlightColor != null) {
-                val highlightStrokeWidth = 2.2.dp.toPx()
-                val halfStroke = highlightStrokeWidth * 0.5f
-                val corner = CardCornerRadius.toPx()
-                drawRoundRect(
-                    color = highlightColor,
-                    topLeft = Offset(halfStroke, halfStroke),
-                    size = Size(
-                        (size.width - highlightStrokeWidth).coerceAtLeast(1f),
-                        (size.height - highlightStrokeWidth).coerceAtLeast(1f)
-                    ),
-                    cornerRadius = CornerRadius(corner, corner),
-                    style = Stroke(width = highlightStrokeWidth)
-                )
+    val borderStroke = when {
+        isSelected -> BorderStroke(2.2.dp, colors.selectionGlow)
+        isHinted -> BorderStroke(2.2.dp, colors.hintGlow)
+        else -> BorderStroke(CardBorderWidth, colors.cardBorder)
+    }
+
+    Box(
+        modifier = modifier
+            .width(cardWidth)
+            .height(cardHeight)
+            .then(flipModifier)
+            .then(elevationModifier)
+            .clip(CardShape)
+            .border(borderStroke, CardShape)
+            .semantics { contentDescription = cardDescription }
+            .then(clickableModifier)
+    ) {
+        if (showFront) {
+            val frontModifier = if (isMidFlip) {
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationY = 180f }
             } else {
-                drawCardOutline(color = colors.cardBorder)
+                Modifier.fillMaxSize()
             }
-        }
-    } else {
-        val borderStroke = when {
-            isSelected -> BorderStroke(2.2.dp, colors.selectionGlow)
-            isHinted -> BorderStroke(2.2.dp, colors.hintGlow)
-            else -> BorderStroke(CardBorderWidth, colors.cardBorder)
-        }
-        val borderModifier = Modifier.border(borderStroke, CardShape)
-        Box(
-            modifier = modifier
-                .width(cardWidth)
-                .height(cardHeight)
-                .then(flipModifier)
-                .then(elevationModifier)
-                .then(borderModifier)
-                .semantics { contentDescription = cardDescription }
-                .then(clickableModifier)
-        ) {
-            if (showFront) {
-                val frontModifier = if (externalFlip != null) {
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val angle = FastOutSlowInEasing.transform(externalFlip.value) * 180f
-                            rotationY = if (angle in 0.5f..179.5f) 180f else 0f
-                        }
-                } else {
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { rotationY = 180f }
-                }
-                Box(modifier = frontModifier) {
-                    CardFrontContent(card = card)
-                }
-            } else {
-                CardBackContent(cardBackTheme = cardBackTheme)
-            }
+            CardFrontContent(card = card, modifier = frontModifier)
+        } else {
+            CardBackContent(modifier = Modifier.fillMaxSize(), cardBackTheme = cardBackTheme)
         }
     }
 }
 
 @Composable
-private fun CardFrontContent(card: Card) {
-    val bitmap = imageResource(getCardDrawableRes(card))
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width.roundToInt()
-        val h = size.height.roundToInt()
-        if (w > 0 && h > 0) {
-            drawImage(
-                image = bitmap,
-                dstSize = IntSize(w, h)
-            )
-        }
-    }
+fun CardFrontContent(
+    card: Card,
+    modifier: Modifier = Modifier
+) {
+    Image(
+        painter = painterResource(getCardDrawableRes(card)),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = modifier
+    )
 }
 
 @Composable
-private fun CardBackContent(cardBackTheme: CardBackTheme = LocalCardBackTheme.current) {
-    val bitmap = imageResource(getCardBackDrawableRes(cardBackTheme))
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width.roundToInt()
-        val h = size.height.roundToInt()
-        if (w > 0 && h > 0) {
-            drawImage(
-                image = bitmap,
-                dstSize = IntSize(w, h)
-            )
-        }
-    }
+fun CardBackContent(
+    modifier: Modifier = Modifier,
+    cardBackTheme: CardBackTheme = LocalCardBackTheme.current
+) {
+    Image(
+        painter = painterResource(getCardBackDrawableRes(cardBackTheme)),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = modifier
+    )
 }
 
 @Composable

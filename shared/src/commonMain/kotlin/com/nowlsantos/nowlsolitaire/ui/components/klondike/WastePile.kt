@@ -55,7 +55,7 @@ internal fun WastePile(
         boardState.gameState.wasteVisibleCount.coerceIn(1, minOf(3, waste.size))
     }
 
-    val fanStep = cardWidth * 0.28f
+    val fanStep = cardWidth * WASTE_FAN_STEP_RATIO
     val extraFanWidth = if (visibleCount > 1) fanStep * (visibleCount - 1) else 0.dp
     val baseSlotX = if (boardState.leftHanded) extraFanWidth else 0.dp
 

@@ -145,4 +145,4 @@ val CARD_BACK_DRAWABLE_RES: DrawableResource = Res.drawable.card_back
 
 const val CARD_IMAGE_WIDTH: Int = 103
 const val CARD_IMAGE_HEIGHT: Int = 154
-const val CARD_ASPECT_RATIO: Float = 1.62f
+const val CARD_ASPECT_RATIO: Float = 154f / 103f // ~1.4951456f
