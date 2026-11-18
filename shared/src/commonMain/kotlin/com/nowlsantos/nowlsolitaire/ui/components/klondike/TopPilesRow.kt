@@ -108,19 +108,19 @@ internal fun TopPilesRow(
         verticalAlignment = Alignment.Top
     ) {
         if (boardState.leftHanded) {
+            stockSlot()
+            wasteSlot()
+            Spacer(modifier = Modifier.width(spacerWidth))
             for (index in 0 until GameState.FOUNDATION_COUNT) {
                 foundationSlot(index)
             }
-            Spacer(modifier = Modifier.width(spacerWidth))
-            wasteSlot()
-            stockSlot()
         } else {
-            stockSlot()
-            wasteSlot()
-            Spacer(modifier = Modifier.width(spacerWidth))
             for (index in 0 until GameState.FOUNDATION_COUNT) {
                 foundationSlot(index)
             }
+            Spacer(modifier = Modifier.width(spacerWidth))
+            wasteSlot()
+            stockSlot()
         }
     }
 }

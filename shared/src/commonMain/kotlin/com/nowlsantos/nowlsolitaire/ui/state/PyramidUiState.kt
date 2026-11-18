@@ -61,5 +61,6 @@ sealed interface PyramidIntent {
     data class UpdateMaxRecycles(val maxRecycles: Int) : PyramidIntent
     data class UpdateDealMode(val dealMode: DealMode) : PyramidIntent
     data class UpdateShowTimer(val enabled: Boolean) : PyramidIntent
+    data class UpdateLeftHanded(val leftHanded: Boolean) : PyramidIntent
     data object ResetStats : PyramidIntent
 }

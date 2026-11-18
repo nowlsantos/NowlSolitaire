@@ -270,7 +270,7 @@ fun KlondikeSettingsBottomSheet(
 
             SettingsToggleRow(
                 title = "Left-Handed Layout",
-                subtitle = "Place Stock and Waste on the right side",
+                subtitle = "Place Stock and Waste on the left side",
                 checked = settings.leftHanded,
                 onCheckedChange = { onIntent(KlondikeIntent.UpdateLeftHanded(it)) }
             )

@@ -80,6 +80,7 @@ class PyramidViewModel(
             is PyramidIntent.UpdateMaxRecycles -> updateMaxRecycles(intent.maxRecycles)
             is PyramidIntent.UpdateDealMode -> updateDealMode(intent.dealMode)
             is PyramidIntent.UpdateShowTimer -> updateSettings { it.copy(showTimer = intent.enabled) }
+            is PyramidIntent.UpdateLeftHanded -> updateSettings { it.copy(leftHanded = intent.leftHanded) }
             PyramidIntent.ResetStats -> viewModelScope.launch { repository.resetStats() }
         }
     }

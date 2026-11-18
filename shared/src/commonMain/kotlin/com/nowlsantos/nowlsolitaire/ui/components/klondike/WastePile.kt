@@ -57,7 +57,7 @@ internal fun WastePile(
 
     val fanStep = cardWidth * WASTE_FAN_STEP_RATIO
     val extraFanWidth = if (visibleCount > 1) fanStep * (visibleCount - 1) else 0.dp
-    val baseSlotX = if (boardState.leftHanded) extraFanWidth else 0.dp
+    val baseSlotX = if (boardState.leftHanded) 0.dp else extraFanWidth
 
     Box(
         modifier = Modifier
@@ -117,9 +117,9 @@ internal fun WastePile(
             visibleCards.forEachIndexed { offsetIndex, card ->
                 val isTopCard = offsetIndex == visibleCards.lastIndex
                 val targetXOffset = if (boardState.leftHanded) {
-                    extraFanWidth - fanStep * offsetIndex
-                } else {
                     fanStep * offsetIndex
+                } else {
+                    extraFanWidth - fanStep * offsetIndex
                 }
                 val targetXPx = with(LocalDensity.current) { targetXOffset.toPx() }
 

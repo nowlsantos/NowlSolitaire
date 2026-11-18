@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
@@ -165,6 +166,7 @@ internal fun StockDrawButton(
     cardHeight: Dp,
     colors: TableColors,
     isLandscape: Boolean = false,
+    pointsLeft: Boolean = false,
     onDrawOrRecycle: () -> Unit
 ) {
     val canAct = hasStockCards || canRecycleStock
@@ -213,11 +215,16 @@ internal fun StockDrawButton(
                     )
             ) {
                 Box(contentAlignment = Alignment.Center) {
+                    val drawIcon = if (pointsLeft) {
+                        Icons.AutoMirrored.Rounded.ArrowBack
+                    } else {
+                        Icons.AutoMirrored.Rounded.ArrowForward
+                    }
                     Icon(
                         imageVector = if (!hasStockCards && canRecycleStock) {
                             Icons.Rounded.Refresh
                         } else {
-                            Icons.AutoMirrored.Rounded.ArrowForward
+                            drawIcon
                         },
                         contentDescription = null,
                         tint = colors.barContent,

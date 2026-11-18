@@ -72,47 +72,72 @@ fun GameTopBar(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (onBack != null) {
-                IconButton(onClick = onBack) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Back to Lobby",
-                        tint = colors.barContent
+                        tint = colors.barContent,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
-            if (roundNumber != null) {
-                HudMetric(label = "ROUND", value = roundNumber.toString(), contentColor = colors.barContent)
+
+            if (roundNumber != null && lives != null) {
+                HudRoundBadge(
+                    round = roundNumber,
+                    lives = lives,
+                    contentColor = colors.barContent
+                )
+            } else if (roundNumber != null) {
+                HudRoundBadge(
+                    round = roundNumber,
+                    lives = null,
+                    contentColor = colors.barContent
+                )
             }
-            if (lives != null) {
-                HudLives(lives = lives, maxLives = maxLives, contentColor = colors.barContent)
-            }
+
             if (streak != null && streak > 0) {
-                HudStreak(streak = streak, contentColor = colors.barContent)
+                HudStreakBadge(streak = streak)
             }
-            HudMetric(label = "SCORE", value = score.toString(), contentColor = colors.barContent)
+
+            HudInlineMetric(label = "Score", value = score.toString(), contentColor = colors.barContent)
+
             if (showTimer) {
-                HudMetric(label = "TIME", value = formatDuration(elapsedSeconds), contentColor = colors.barContent)
+                HudInlineMetric(label = "Time", value = formatDuration(elapsedSeconds), contentColor = colors.barContent)
             }
-            HudMetric(label = "MOVES", value = moveCount.toString(), contentColor = colors.barContent)
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onOpenStats) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onOpenStats,
+                modifier = Modifier.size(36.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Rounded.BarChart,
                     contentDescription = "Statistics",
-                    tint = colors.barContent
+                    tint = colors.barContent,
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            IconButton(onClick = onOpenSettings) {
+            IconButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.size(36.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Rounded.Settings,
                     contentDescription = "Settings",
-                    tint = colors.barContent
+                    tint = colors.barContent,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -236,51 +261,37 @@ private fun BottomBarAction(
 }
 
 @Composable
-private fun HudMetric(
-    label: String,
-    value: String,
+private fun HudRoundBadge(
+    round: Int,
+    lives: Int?,
     contentColor: Color
 ) {
-    Column {
-        Text(
-            text = label,
-            color = contentColor.copy(alpha = 0.65f),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.8.sp
-        )
-        Text(
-            text = value,
-            color = contentColor,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun HudLives(
-    lives: Int,
-    maxLives: Int,
-    contentColor: Color
-) {
-    Column {
-        Text(
-            text = "LIVES",
-            color = contentColor.copy(alpha = 0.65f),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.8.sp
-        )
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = contentColor.copy(alpha = 0.12f)
+    ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(1.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            repeat(maxLives) { index ->
-                val isFilled = index < lives
+            Text(
+                text = "Round $round",
+                color = contentColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (lives != null) {
                 Text(
-                    text = if (isFilled) "❤️" else "🖤",
-                    fontSize = 12.sp
+                    text = "•",
+                    color = contentColor.copy(alpha = 0.4f),
+                    fontSize = 11.sp
+                )
+                Text(
+                    text = "❤️ $lives",
+                    color = contentColor,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -288,22 +299,41 @@ private fun HudLives(
 }
 
 @Composable
-private fun HudStreak(
-    streak: Int,
+private fun HudStreakBadge(streak: Int) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFFFF9800).copy(alpha = 0.18f)
+    ) {
+        Text(
+            text = "🔥 $streak",
+            color = Color(0xFFFFB300),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun HudInlineMetric(
+    label: String,
+    value: String,
     contentColor: Color
 ) {
-    Column {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         Text(
-            text = "STREAK",
-            color = Color(0xFFFFA000),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.8.sp
+            text = "$label:",
+            color = contentColor.copy(alpha = 0.65f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
         )
         Text(
-            text = "🔥$streak",
-            color = Color(0xFFFFB300),
-            fontSize = 15.sp,
+            text = value,
+            color = contentColor,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
     }

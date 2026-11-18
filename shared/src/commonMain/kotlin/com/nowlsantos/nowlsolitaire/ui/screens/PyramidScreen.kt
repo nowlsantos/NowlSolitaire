@@ -187,6 +187,7 @@ fun PyramidScreen(
                         uiState.activeDrawCard,
                         uiState.settings.tableTheme,
                         uiState.settings.cardBackTheme,
+                        uiState.settings.leftHanded,
                         uiState.dealId
                     ) {
                         PyramidBoardState(
@@ -196,7 +197,8 @@ fun PyramidScreen(
                             activeHint = uiState.activeHint,
                             activeMatch = uiState.activeMatch,
                             activeDrawCard = uiState.activeDrawCard,
-                            dealId = uiState.dealId
+                            dealId = uiState.dealId,
+                            leftHanded = uiState.settings.leftHanded
                         )
                     }
                     PyramidBoard(

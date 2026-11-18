@@ -19,7 +19,8 @@ data class PyramidBoardState(
     val activeHint: PyramidMatch? = null,
     val activeMatch: PyramidMatch? = null,
     val activeDrawCard: Card? = null,
-    val dealId: Long = 0L
+    val dealId: Long = 0L,
+    val leftHanded: Boolean = false
 )
 
 internal class PyramidOffsetHolder(var value: Offset = Offset.Zero)

@@ -92,7 +92,8 @@ data class PyramidSettings(
     val maxRecycles: Int = PyramidGameState.DEFAULT_MAX_RECYCLES,
     val dealMode: DealMode = DealMode.WINNABLE,
     val showTimer: Boolean = false,
-    val tapToAutoMove: Boolean = true
+    val tapToAutoMove: Boolean = true,
+    val leftHanded: Boolean = false
 )
 
 @Serializable

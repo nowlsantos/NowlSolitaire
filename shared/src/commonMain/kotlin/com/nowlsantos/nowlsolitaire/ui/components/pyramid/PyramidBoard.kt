@@ -484,60 +484,74 @@ fun PyramidBoard(
 
             Spacer(modifier = Modifier.height(tableauPilesGap))
 
-            // 2. Play Area: Stock + Draw Button + Waste, and Discard/Foundation
-            Row(
-                modifier = Modifier
-                    .width(boardContentWidth)
-                    .padding(
-                        horizontal = if (isLandscape) 12.dp else 8.dp,
-                        vertical = if (isLandscape) 2.dp else 4.dp
-                    ),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // 2. Play Area: Discard/Foundation and Waste + Draw Button + Stock
+            val wastePileSlot: @Composable () -> Unit = {
+                WastePileView(
+                    gameState = gameState,
+                    cardWidth = cardWidth,
+                    cardHeight = cardHeight,
+                    colors = colors,
+                    cardBackTheme = boardState.cardBackTheme,
+                    activeHint = boardState.activeHint,
+                    isLandscape = isLandscape,
+                    isDealingState = isDealingState,
+                    getFlyingHiddenState = getFlyingHiddenState,
+                    onTapWaste = onTapWaste,
+                    onPositioned = onWastePositioned
+                )
+            }
+
+            val stockPileSlot: @Composable () -> Unit = {
+                StockPileView(
+                    gameState = gameState,
+                    cardWidth = cardWidth,
+                    cardHeight = cardHeight,
+                    colors = colors,
+                    cardBackTheme = boardState.cardBackTheme,
+                    activeHint = boardState.activeHint,
+                    isLandscape = isLandscape,
+                    isDealingState = isDealingState,
+                    getFlyingHiddenState = getFlyingHiddenState,
+                    onTapStock = onTapStock,
+                    onDrawOrRecycle = onDrawOrRecycle,
+                    onPositioned = onStockPositioned
+                )
+            }
+
+            val stockAndWasteRow: @Composable () -> Unit = {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(if (isLandscape) 8.dp else 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StockPileView(
-                        gameState = gameState,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        colors = colors,
-                        cardBackTheme = boardState.cardBackTheme,
-                        activeHint = boardState.activeHint,
-                        isLandscape = isLandscape,
-                        isDealingState = isDealingState,
-                        getFlyingHiddenState = getFlyingHiddenState,
-                        onTapStock = onTapStock,
-                        onDrawOrRecycle = onDrawOrRecycle,
-                        onPositioned = onStockPositioned
-                    )
-
-                    StockDrawButton(
-                        hasStockCards = gameState.stock.isNotEmpty(),
-                        canRecycleStock = gameState.canRecycleStock,
-                        cardHeight = cardHeight,
-                        colors = colors,
-                        isLandscape = isLandscape,
-                        onDrawOrRecycle = onDrawOrRecycle
-                    )
-
-                    WastePileView(
-                        gameState = gameState,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        colors = colors,
-                        cardBackTheme = boardState.cardBackTheme,
-                        activeHint = boardState.activeHint,
-                        isLandscape = isLandscape,
-                        isDealingState = isDealingState,
-                        getFlyingHiddenState = getFlyingHiddenState,
-                        onTapWaste = onTapWaste,
-                        onPositioned = onWastePositioned
-                    )
+                    if (boardState.leftHanded) {
+                        stockPileSlot()
+                        StockDrawButton(
+                            hasStockCards = gameState.stock.isNotEmpty(),
+                            canRecycleStock = gameState.canRecycleStock,
+                            cardHeight = cardHeight,
+                            colors = colors,
+                            isLandscape = isLandscape,
+                            pointsLeft = false,
+                            onDrawOrRecycle = onDrawOrRecycle
+                        )
+                        wastePileSlot()
+                    } else {
+                        wastePileSlot()
+                        StockDrawButton(
+                            hasStockCards = gameState.stock.isNotEmpty(),
+                            canRecycleStock = gameState.canRecycleStock,
+                            cardHeight = cardHeight,
+                            colors = colors,
+                            isLandscape = isLandscape,
+                            pointsLeft = true,
+                            onDrawOrRecycle = onDrawOrRecycle
+                        )
+                        stockPileSlot()
+                    }
                 }
+            }
 
+            val discardPileSlot: @Composable () -> Unit = {
                 DiscardPileView(
                     gameState = gameState,
                     cardWidth = cardWidth,
@@ -548,6 +562,25 @@ fun PyramidBoard(
                     getFlyingHiddenState = getFlyingHiddenState,
                     onPositioned = onDiscardPositioned
                 )
+            }
+
+            Row(
+                modifier = Modifier
+                    .width(boardContentWidth)
+                    .padding(
+                        horizontal = if (isLandscape) 12.dp else 8.dp,
+                        vertical = if (isLandscape) 2.dp else 4.dp
+                    ),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (boardState.leftHanded) {
+                    stockAndWasteRow()
+                    discardPileSlot()
+                } else {
+                    discardPileSlot()
+                    stockAndWasteRow()
+                }
             }
         }
 
