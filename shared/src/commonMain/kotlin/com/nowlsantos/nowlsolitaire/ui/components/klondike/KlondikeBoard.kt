@@ -42,6 +42,7 @@ import com.nowlsantos.nowlsolitaire.domain.engine.KlondikeRules
 import com.nowlsantos.nowlsolitaire.domain.model.Card
 import com.nowlsantos.nowlsolitaire.domain.model.GameState
 import com.nowlsantos.nowlsolitaire.domain.model.PileLocation
+import com.nowlsantos.nowlsolitaire.ui.components.CARD_ASPECT_RATIO
 import com.nowlsantos.nowlsolitaire.ui.components.LocalCardBackTheme
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeIntent
 import com.nowlsantos.nowlsolitaire.ui.theme.toColors
@@ -383,7 +384,7 @@ fun KlondikeBoard(
             3.2f
         }
         val maxCardHeightFromHeight = (availableH - topRowGap) / heightDenominator
-        val maxCardWidthFromHeight = maxCardHeightFromHeight / 1.42f
+        val maxCardWidthFromHeight = maxCardHeightFromHeight / CARD_ASPECT_RATIO
 
         val horizontalGap = if (isLandscape) {
             (maxCardWidthFromHeight * 0.12f).coerceIn(4.dp, 10.dp)
@@ -394,7 +395,7 @@ fun KlondikeBoard(
         val maxCardWidthFromWidth = (availableW - totalGaps) / GameState.TABLEAU_COUNT
 
         val cardWidth = minOf(maxCardWidthFromWidth, maxCardWidthFromHeight)
-        val cardHeight = cardWidth * 1.42f
+        val cardHeight = cardWidth * CARD_ASPECT_RATIO
         val boardContentWidth = (cardWidth * GameState.TABLEAU_COUNT) + totalGaps
         val tableauAvailableHeight = (availableH - cardHeight - topRowGap).coerceAtLeast(cardHeight)
 

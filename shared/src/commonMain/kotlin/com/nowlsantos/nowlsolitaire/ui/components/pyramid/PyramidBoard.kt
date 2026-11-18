@@ -30,6 +30,7 @@ import com.nowlsantos.nowlsolitaire.domain.model.Card
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidGameState
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidLocation
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidMatch
+import com.nowlsantos.nowlsolitaire.ui.components.CARD_ASPECT_RATIO
 import com.nowlsantos.nowlsolitaire.ui.state.PyramidIntent
 import com.nowlsantos.nowlsolitaire.ui.theme.toColors
 
@@ -440,11 +441,11 @@ fun PyramidBoard(
         } else {
             (availableH - 36.dp).coerceAtLeast(0.dp) / 4.64f
         }
-        val maxCardWidthFromHeight = maxCardHeightFromHeight / 1.4f
+        val maxCardWidthFromHeight = maxCardHeightFromHeight / CARD_ASPECT_RATIO
 
         val calculatedWidth = minOf(maxCardWidthFromWidth, maxCardWidthFromHeight)
         val cardWidth = calculatedWidth.coerceAtLeast(28.dp)
-        val cardHeight = cardWidth * 1.4f
+        val cardHeight = cardWidth * CARD_ASPECT_RATIO
         val verticalOverlap = cardHeight * verticalOverlapRatio
         val pyramidTotalHeight = (verticalOverlap * 6) + cardHeight
         val boardContentWidth = (cardWidth * 7) + totalHorizontalGaps
