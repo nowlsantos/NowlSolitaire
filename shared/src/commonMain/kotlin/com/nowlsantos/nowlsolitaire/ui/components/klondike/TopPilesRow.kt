@@ -72,6 +72,7 @@ internal fun TopPilesRow(
             textMeasurer = textMeasurer,
             activeDragState = activeDragState,
             getFlyingHiddenState = getFlyingHiddenState,
+            onUpdateTargetBounds = onUpdateTargetBounds,
             onRegisterCardOrigin = onRegisterCardOrigin,
             onStartDrag = onStartDrag,
             onDragDelta = onDragDelta,

@@ -474,6 +474,8 @@ fun KlondikeBoard(
                     }
                 }
             } else {
+                val isStockWasteMove = previousState != null &&
+                    (currentState.stock.size != previousState.stock.size || currentState.waste.size != previousState.waste.size)
                 val newFlights = buildFlightsForMove(
                     oldState = previousState,
                     newState = currentState,
@@ -487,12 +489,14 @@ fun KlondikeBoard(
                 Snapshot.withoutReadObservation {
                     dealMountLimitState.intValue = Int.MAX_VALUE
                 }
-                if (newFlights.isNotEmpty()) {
+                if (newFlights.isNotEmpty() || isStockWasteMove) {
                     Snapshot.withoutReadObservation {
                         val newIds = newFlights.flatMap { f -> f.cards.map { it.id } }.toSet()
-                        val hasNewFlipFromBack = newFlights.any { it.flipFromBack }
+                        val hasNewStockWaste = isStockWasteMove || newFlights.any { it.startFromStock || it.endAtStock }
+                        val hasNewFlipFromBack = newFlights.any { it.flipFromBack && !it.isDeal }
                         val merged = activeFlightsState.value.filterNot { existing ->
                             existing.progressState.floatValue >= 1f ||
+                                (hasNewStockWaste && (existing.startFromStock || existing.endAtStock)) ||
                                 (hasNewFlipFromBack && existing.flipFromBack && !existing.isDeal) ||
                                 existing.cards.any { it.id in newIds }
                         } + newFlights

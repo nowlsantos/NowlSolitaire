@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.nowlsantos.nowlsolitaire.domain.model.GameStats
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunRecord
 import com.nowlsantos.nowlsolitaire.domain.model.PyramidRunSession
@@ -82,11 +83,14 @@ fun NoMovesDialog(
     canUndo: Boolean,
     onUndo: () -> Unit,
     onReplayDeal: () -> Unit,
-    onNewDeal: () -> Unit,
-    onDismiss: () -> Unit
+    onNewDeal: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        ),
         title = { Text(text = "Round Over — No More Moves") },
         text = {
             Text(
@@ -389,11 +393,14 @@ fun PyramidLifeLostDialog(
     canUndo: Boolean,
     onUndo: () -> Unit,
     onRetryDeal: () -> Unit,
-    onContinueNextDeal: () -> Unit,
-    onDismiss: () -> Unit
+    onContinueNextDeal: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        ),
         title = { Text(text = "Round Over — 1 Life Lost 💔") },
         text = {
             Text(
@@ -426,13 +433,16 @@ fun PyramidGameOverDialog(
     totalRunScore: Int,
     bestStreak: Int,
     onStartNewRun: () -> Unit,
-    onDismiss: () -> Unit,
     canUndo: Boolean = false,
     onUndo: (() -> Unit)? = null
 ) {
     val tier = PyramidRunSession.getDifficultyTier(finalRound)
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        ),
         title = { Text(text = "Game Over — Out of Lives 💔") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

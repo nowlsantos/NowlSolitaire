@@ -267,8 +267,7 @@ fun KlondikeScreen(
                 onNewDeal = {
                     onIntent(KlondikeIntent.DismissNoMovesDialog)
                     onIntent(KlondikeIntent.NewGame)
-                },
-                onDismiss = { onIntent(KlondikeIntent.DismissNoMovesDialog) }
+                }
             )
         }
 

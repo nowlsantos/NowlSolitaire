@@ -272,8 +272,7 @@ fun PyramidScreen(
                     onStartNewRun = {
                         onIntent(PyramidIntent.DismissNoMovesDialog)
                         onIntent(PyramidIntent.StartNewRun)
-                    },
-                    onDismiss = { onIntent(PyramidIntent.DismissNoMovesDialog) }
+                    }
                 )
             } else {
                 PyramidLifeLostDialog(
@@ -290,8 +289,7 @@ fun PyramidScreen(
                     onContinueNextDeal = {
                         onIntent(PyramidIntent.DismissNoMovesDialog)
                         onIntent(PyramidIntent.ContinueRunWithLostLife)
-                    },
-                    onDismiss = { onIntent(PyramidIntent.DismissNoMovesDialog) }
+                    }
                 )
             }
         }

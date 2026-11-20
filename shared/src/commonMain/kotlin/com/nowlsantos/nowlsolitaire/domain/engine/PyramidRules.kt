@@ -162,7 +162,10 @@ object PyramidRules {
         return moves
     }
 
-    fun hasAnyMovesLeft(state: PyramidGameState): Boolean {
+    fun hasAnyMovesLeft(
+        state: PyramidGameState,
+        isCancelled: () -> Boolean = { false }
+    ): Boolean {
         if (state.isWon) return false
         if (findAvailableMoves(state).isNotEmpty()) return true
         if (state.stock.isNotEmpty()) return true
@@ -170,8 +173,9 @@ object PyramidRules {
 
         var sim = state
         val seenCycles = HashSet<Pair<List<Card>, List<Card>>>()
-        while (true) {
+        while (!isCancelled()) {
             val next = PyramidEngine.drawOrRecycle(sim) ?: return false
+            if (isCancelled()) return true
             if (findAvailableMoves(next).isNotEmpty()) {
                 return true
             }
@@ -181,6 +185,7 @@ object PyramidRules {
             }
             sim = next
         }
+        return true
     }
 
     fun findBestHint(state: PyramidGameState): PyramidMatch? {

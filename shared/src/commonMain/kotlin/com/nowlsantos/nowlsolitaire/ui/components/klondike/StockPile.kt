@@ -55,7 +55,7 @@ internal fun StockPile(
             top to count
         }
     }
-    val topStock = visibleStockInfo.first
+    val topStock = visibleStockInfo.first ?: stock.lastOrNull()
     val visibleStockCount = visibleStockInfo.second
 
     Box(

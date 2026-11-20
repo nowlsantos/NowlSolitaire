@@ -131,7 +131,11 @@ fun PyramidBoard(
             startFromStock = true
         )
         Snapshot.withoutReadObservation {
-            val merged = activeFlightsState.value.filterNot { it.card.id == activeDrawCard.id } + flight
+            val merged = activeFlightsState.value.filterNot { existing ->
+                existing.progressState.floatValue >= 1f ||
+                    (existing.startFromStock && !existing.isDeal) ||
+                    existing.card.id == activeDrawCard.id
+            } + flight
             activeFlightsState.value = merged
             syncFlyingHiddenStates(merged)
         }
@@ -183,7 +187,10 @@ fun PyramidBoard(
             }
         }
         Snapshot.withoutReadObservation {
-            val merged = activeFlightsState.value + newFlights
+            val newIds = newFlights.mapTo(HashSet()) { it.card.id }
+            val merged = activeFlightsState.value.filterNot { existing ->
+                existing.progressState.floatValue >= 1f || existing.card.id in newIds
+            } + newFlights
             activeFlightsState.value = merged
             syncFlyingHiddenStates(merged)
         }
@@ -218,7 +225,25 @@ fun PyramidBoard(
                 }
             }
         }
-        if (previousGameState != null &&
+        val isRecycleMove = previousGameState != null &&
+            previousGameState.seed == gameState.seed &&
+            !needsDealAnimation &&
+            activeDrawCard == null &&
+            activeMatch == null &&
+            gameState.moveCount > previousGameState.moveCount &&
+            previousGameState.stock.isEmpty() &&
+            gameState.stock.isNotEmpty()
+        if (isRecycleMove) {
+            Snapshot.withoutReadObservation {
+                val remaining = activeFlightsState.value.filterNot { existing ->
+                    existing.progressState.floatValue >= 1f || (existing.startFromStock && !existing.isDeal)
+                }
+                if (remaining.size != activeFlightsState.value.size) {
+                    activeFlightsState.value = remaining
+                    syncFlyingHiddenStates(remaining)
+                }
+            }
+        } else if (previousGameState != null &&
             previousGameState.seed == gameState.seed &&
             !needsDealAnimation &&
             activeDrawCard == null &&

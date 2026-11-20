@@ -69,15 +69,22 @@ internal fun FlightOverlay(
                     if (flight.progressState.floatValue >= 1f) {
                         continue
                     }
-                    if (!flight.startOrigin.isSpecified || !flight.targetOrigin.isSpecified) {
-                        flight.progressState.floatValue = 0f
-                        allFinished = false
-                        continue
-                    }
                     if (flight.startTimeNanos < 0L) {
                         flight.startTimeNanos = frameNanos - 16_666_667L
                     } else if (shouldRebaseDealStart && flight.isDeal) {
                         flight.startTimeNanos += gapNanos - 16_666_667L
+                    }
+                    if (!flight.startOrigin.isSpecified || !flight.targetOrigin.isSpecified) {
+                        val waitingMs = ((frameNanos - flight.startTimeNanos) / 1_000_000f)
+                        val maxWaitMs = if (flight.isDeal) 800f else 300f
+                        if (waitingMs > maxWaitMs) {
+                            flight.progressState.floatValue = 1f
+                            anyNewlyLanded = true
+                        } else {
+                            flight.progressState.floatValue = 0f
+                            allFinished = false
+                        }
+                        continue
                     }
                     val distance = (flight.targetOrigin - flight.startOrigin).getDistance()
                     if (flight.fromDragDrop && distance < 2f) {

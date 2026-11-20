@@ -499,6 +499,7 @@ class KlondikeViewModel(
         val snapshot = session.currentState
         if (snapshot.isWon || snapshot.isAutoCompleteReady || _uiState.value.isAutoCompleting || _uiState.value.isWon || _uiState.value.isAutoCompleteAvailable) return
         deadlockJob = viewModelScope.launch {
+            delay(250.milliseconds)
             val hasMoves = withContext(defaultDispatcher) {
                 engine.hasAvailableMoves(snapshot) { !coroutineContext.isActive }
             }

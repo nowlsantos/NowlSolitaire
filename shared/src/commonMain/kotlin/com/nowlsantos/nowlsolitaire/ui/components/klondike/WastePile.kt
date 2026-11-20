@@ -14,8 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
@@ -41,6 +43,7 @@ internal fun WastePile(
     textMeasurer: TextMeasurer,
     activeDragState: State<ActiveDragState?>,
     getFlyingHiddenState: (String) -> MutableState<Boolean>,
+    onUpdateTargetBounds: (PileLocation, Rect) -> Unit,
     onRegisterCardOrigin: (String, Offset) -> Unit,
     onStartDrag: (PileLocation, Int, List<Card>, Offset?) -> Unit,
     onDragDelta: (Offset) -> Unit,
@@ -63,12 +66,12 @@ internal fun WastePile(
         modifier = Modifier
             .width(cardWidth + extraFanWidth)
             .height(cardHeight)
+            .onGloballyPositioned { coords ->
+                if (coords.isAttached) {
+                    onUpdateTargetBounds(PileLocation.Waste, coords.boundsInRoot())
+                }
+            }
     ) {
-        val baseFlyingState = if (waste.size == 1) {
-            getFlyingHiddenState(waste[0].id)
-        } else {
-            null
-        }
         EmptyPileSlot(
             cardWidth = cardWidth,
             cardHeight = cardHeight,
@@ -77,7 +80,8 @@ internal fun WastePile(
             modifier = Modifier
                 .offset(x = baseSlotX)
                 .graphicsLayer {
-                    val showEmpty = waste.isEmpty() || (waste.size == 1 && baseFlyingState?.value == true)
+                    val allVisibleHidden = visibleCount > 0 && waste.takeLast(visibleCount).all { getFlyingHiddenState(it.id).value }
+                    val showEmpty = waste.isEmpty() || allVisibleHidden
                     alpha = if (showEmpty) 1f else 0f
                 }
         )

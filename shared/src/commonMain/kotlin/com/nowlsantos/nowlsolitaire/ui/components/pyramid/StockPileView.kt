@@ -77,7 +77,7 @@ internal fun StockPileView(
             top to count
         }
     }
-    val topVisibleStock = visibleStockInfo.first
+    val topVisibleStock = visibleStockInfo.first ?: stock.lastOrNull()
     val visibleStockCount = visibleStockInfo.second
 
     Column(

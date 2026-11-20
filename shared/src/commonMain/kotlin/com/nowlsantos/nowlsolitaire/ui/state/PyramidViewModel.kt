@@ -148,7 +148,7 @@ class PyramidViewModel(
                 internalElapsedSeconds = saved.elapsedSeconds
                 val currentSnapshot = session.currentState
                 val isDeadlocked = hasStartedMoving && withContext(defaultDispatcher) {
-                    !rules.hasAnyMovesLeft(currentSnapshot)
+                    !rules.hasAnyMovesLeft(currentSnapshot) { !coroutineContext.isActive }
                 }
                 val isOngoing = saved.hasStartedMoving || saved.gameState.moveCount > 0
                 val dealId = if (isOngoing) 0L else nextDealId++
@@ -428,7 +428,7 @@ class PyramidViewModel(
                 return@launch
             }
             val hasMoves = withContext(defaultDispatcher) {
-                rules.hasAnyMovesLeft(snapshot)
+                rules.hasAnyMovesLeft(snapshot) { !coroutineContext.isActive }
             }
             if (!isActive || session.currentState !== snapshot || snapshot.isWon) return@launch
             if (hasMoves) {
@@ -517,8 +517,9 @@ class PyramidViewModel(
         val snapshot = session.currentState
         if (snapshot.isWon) return
         deadlockJob = viewModelScope.launch {
+            delay(250.milliseconds)
             val hasMoves = withContext(defaultDispatcher) {
-                rules.hasAnyMovesLeft(snapshot)
+                rules.hasAnyMovesLeft(snapshot) { !coroutineContext.isActive }
             }
             if (!hasMoves && isActive && session.currentState === snapshot && !snapshot.isWon) {
                 _uiState.update { it.copy(showNoMovesDialog = true) }

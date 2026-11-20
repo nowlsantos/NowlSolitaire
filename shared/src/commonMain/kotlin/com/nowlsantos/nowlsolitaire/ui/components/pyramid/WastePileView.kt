@@ -48,6 +48,9 @@ internal fun WastePileView(
     val topFlyingState = topWaste?.let { card ->
         remember(card.id) { getFlyingHiddenState(card.id) }
     }
+    val underFlyingState = underneathWaste?.let { card ->
+        remember(card.id) { getFlyingHiddenState(card.id) }
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -70,17 +73,16 @@ internal fun WastePileView(
                 labelFontSize = 14.sp,
                 onClick = null,
                 modifier = Modifier.graphicsLayer {
-                    val showEmpty = waste.isEmpty() || (waste.size == 1 && topFlyingState?.value == true)
+                    val allVisibleHidden = (topFlyingState?.value == true) &&
+                        (underFlyingState == null || underFlyingState.value)
+                    val showEmpty = waste.isEmpty() || allVisibleHidden
                     alpha = if (showEmpty) 1f else 0f
                 }
             )
 
             // Card underneath (revealed while top card is flying away or arriving)
-            if (underneathWaste != null) {
+            if (underneathWaste != null && underFlyingState != null) {
                 key(underneathWaste.id) {
-                    val underFlyingState = remember(underneathWaste.id) {
-                        getFlyingHiddenState(underneathWaste.id)
-                    }
                     PlayingCardView(
                         card = underneathWaste,
                         cardWidth = cardWidth,
