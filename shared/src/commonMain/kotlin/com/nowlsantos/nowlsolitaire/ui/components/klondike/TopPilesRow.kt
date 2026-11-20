@@ -21,7 +21,7 @@ import com.nowlsantos.nowlsolitaire.domain.model.PileLocation
 import com.nowlsantos.nowlsolitaire.ui.state.KlondikeIntent
 import com.nowlsantos.nowlsolitaire.ui.theme.TableColors
 
-internal const val WASTE_FAN_STEP_RATIO = 0.36f
+internal const val WASTE_FAN_STEP_RATIO = 0.44f
 
 @Composable
 internal fun TopPilesRow(
